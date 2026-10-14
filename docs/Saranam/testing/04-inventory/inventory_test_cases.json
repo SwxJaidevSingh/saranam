@@ -1,0 +1,1935 @@
+{
+  "module": "Inventory",
+  "module_code": "INV",
+  "version": "1.0",
+  "summary": "Exhaustive GO-LIVE manual test pack for the Inventory module of Saranam India Health Care (https://saranam.fieldintel.ai). Covers the Inventory Dashboard, Medicines Master, Stock Management, Purchase Orders (list/wizard/detail), Dispensing (list/wizard/dashboard/detail), Alerts (list/dashboard), and Provider Stock. Includes functional, UI/UX, validation, negative, API, permission, edge-case and data-integrity cases. Endpoints, payloads and behaviours were derived strictly from frontend/src/api/inventory.js, frontend/src/api/client.js, backend/app/inventory/routes.py and backend/app/inventory/schemas.py. Several front-end vs back-end payload mismatches were found during analysis and are captured as defect-hunting cases (e.g. PO Wizard sends items[].ordered_quantity but a top-level status:'draft', Goods Receipt dialog sends {items:[...]} while backend GoodsReceiveSchema expects {received_items:[...]} with mrp & date validation, Dispensing Wizard posts {items:[{batches}]} while DispenseCreateSchema expects a single medicine_id/dispensed_quantity/dispensed_from_location, AssignStock sends source_location_id while backend expects from_location_id, ReturnStock sends destination_location_id while backend expects to_location_id).",
+  "in_scope": [
+    "Inventory Dashboard KPIs, quick actions, module cards, refresh, loading/empty states",
+    "Medicines Master: list, search, pagination, add/edit/deactivate medicine, all form fields and validation",
+    "Stock Management: stock list, location filter, status filter, pagination, stock-level bar, value, category, status chips",
+    "Purchase Orders: list, status filter, client-side search, pagination, 3-step creation wizard, PO detail, submit/approve/receive/print, goods receipt with batch details",
+    "Dispensing: records list with type/date filters and search, 4-step dispensing wizard (patient/prescription/batch/review), dispensing dashboard KPIs, dispensing detail with medicine return",
+    "Alerts: alert list with type/severity/status tabs, acknowledge, resolve, bulk acknowledge, alerts dashboard with breakdown",
+    "Provider Stock: provider locations list, setup provider, assign stock, return stock, expand provider to view stock",
+    "Cross-cutting selectors: SupplierSelector, LocationSelector, PatientSelector, PrescriptionSelector, QuickDispenseSelector, BatchSelector (FIFO/FEFO)",
+    "Role-based access (admin/data_entry/viewer), 401 session handling, non-existent ids",
+    "API request/response/error verification for all inventory endpoints used by the UI"
+  ],
+  "out_of_scope": [
+    "Requisitions module (no UI route wired in App.jsx; backend endpoints exist but are not exercised by the Inventory screens)",
+    "Analytics deep reports (ABC-VED, consumption, turnover) beyond the dashboard/KPI consumption already wired to UI",
+    "Stock-movements list screen (no dedicated route in App.jsx)",
+    "Immediate-dispense endpoints (consumed by Saranam visit flow, not by the Inventory screens under test)",
+    "Suppliers CRUD screen and Locations CRUD screen (no dedicated routes; only consumed via selectors)",
+    "Login/authentication module internals (covered by the Auth test pack); only session expiry behaviour is verified here",
+    "Backend database performance/load testing"
+  ],
+  "screens": [
+    {"name": "Inventory Dashboard", "route": "/inventory"},
+    {"name": "Medicines Master", "route": "/inventory/medicines"},
+    {"name": "Stock Management", "route": "/inventory/stock"},
+    {"name": "Purchase Orders List", "route": "/inventory/purchase-orders"},
+    {"name": "Purchase Order Wizard (Create)", "route": "/inventory/purchase-orders/new"},
+    {"name": "Purchase Order Detail", "route": "/inventory/purchase-orders/:id"},
+    {"name": "Dispensing Records List", "route": "/inventory/dispense"},
+    {"name": "Dispensing Wizard (New)", "route": "/inventory/dispense/new"},
+    {"name": "Dispensing Dashboard", "route": "/inventory/dispense/dashboard"},
+    {"name": "Dispensing Detail", "route": "/inventory/dispensing/:id"},
+    {"name": "Alerts List", "route": "/inventory/alerts"},
+    {"name": "Alerts Dashboard", "route": "/inventory/alerts/dashboard"},
+    {"name": "Provider Stock Management", "route": "/inventory/provider-stock"}
+  ],
+  "roles_and_access": "All Inventory routes require an authenticated session (JWT access_token in localStorage; Authorization: Bearer header added by the axios client). Backend RBAC (role_required decorator) maps roles to permissions: admin = {read, write, approve, dispense, manage}; data_entry = {read, write, dispense}; viewer = {read}. Read endpoints (lists, dashboards, detail GETs) need 'read'. Create/edit medicine, create/update/submit PO, create supplier, transfer stock, acknowledge/resolve alerts, provider-stock assign/return/setup need 'write'. Delete medicine, delete location/supplier, manual stock update (/stock/update), generate alerts need 'manage'. Approve/cancel PO and approve/reject requisition need 'approve'. Dispense and return-dispensed need 'dispense'. Missing/invalid token returns 401 (client attempts refresh then redirects to /login). A logged-in user lacking the required permission receives HTTP 403 with message 'Insufficient permissions. Required: ...'. Unknown user id on a valid token returns 401 'User not found'.",
+  "api_endpoints": [
+    {"method": "GET", "path": "/api/inventory/medicines", "purpose": "List medicines with page, per_page, search, category, essential, is_active; returns {medicines,total,page,per_page,pages}"},
+    {"method": "GET", "path": "/api/inventory/medicines/{id}", "purpose": "Get a single medicine by id (404 if not found)"},
+    {"method": "GET", "path": "/api/inventory/medicines/search", "purpose": "Type-ahead search medicines by q (limit max 100)"},
+    {"method": "POST", "path": "/api/inventory/medicines", "purpose": "Create medicine (write); 201 success, 422 validation, 400 ValueError (e.g. duplicate)"},
+    {"method": "PUT", "path": "/api/inventory/medicines/{id}", "purpose": "Update medicine (write); 422 validation, 404 if not found"},
+    {"method": "DELETE", "path": "/api/inventory/medicines/{id}", "purpose": "Deactivate medicine (manage); 404 if not found"},
+    {"method": "GET", "path": "/api/inventory/locations", "purpose": "List inventory locations (filter type, is_active)"},
+    {"method": "GET", "path": "/api/inventory/stock", "purpose": "List stock levels (location_id, medicine_id, status, low_stock) - returns a flat array"},
+    {"method": "GET", "path": "/api/inventory/stock/low-stock", "purpose": "List low-stock items"},
+    {"method": "POST", "path": "/api/inventory/stock/update", "purpose": "Manual stock update (manage); StockUpdateSchema requires medicine_id, location_id, quantity>=0"},
+    {"method": "POST", "path": "/api/inventory/stock/transfer", "purpose": "Transfer stock between locations (write); 201 success, 400 ValueError"},
+    {"method": "GET", "path": "/api/inventory/suppliers", "purpose": "List suppliers (page, per_page, is_active); returns {suppliers,total,...}"},
+    {"method": "GET", "path": "/api/inventory/batches", "purpose": "List batches (medicine_id, location_id, status, expiring_soon); BatchSelector reads response.data.batches"},
+    {"method": "GET", "path": "/api/inventory/batches/expiring", "purpose": "List batches expiring within ?days (default 30)"},
+    {"method": "GET", "path": "/api/inventory/purchase-orders", "purpose": "List POs (page, per_page, status, supplier_id); returns {purchase_orders,total,page,per_page,pages}"},
+    {"method": "GET", "path": "/api/inventory/purchase-orders/{id}", "purpose": "Get PO detail (404 if not found)"},
+    {"method": "POST", "path": "/api/inventory/purchase-orders", "purpose": "Create PO (write); PurchaseOrderCreateSchema requires supplier_id + items[>=1] each {medicine_id, ordered_quantity>0, unit_price>=0}; 422 validation"},
+    {"method": "PUT", "path": "/api/inventory/purchase-orders/{id}", "purpose": "Update a draft PO (write)"},
+    {"method": "POST", "path": "/api/inventory/purchase-orders/{id}/submit", "purpose": "Submit PO for approval (write)"},
+    {"method": "POST", "path": "/api/inventory/purchase-orders/{id}/approve", "purpose": "Approve PO (approve permission)"},
+    {"method": "POST", "path": "/api/inventory/purchase-orders/{id}/receive", "purpose": "Record goods receipt (write); GoodsReceiveSchema expects {received_items:[{item_id, received_quantity>0, batch_number, manufacture_date, expiry_date>mfg, mrp?}]}"},
+    {"method": "POST", "path": "/api/inventory/purchase-orders/{id}/cancel", "purpose": "Cancel PO (approve); body {reason}"},
+    {"method": "GET", "path": "/api/inventory/prescriptions/patient/{patient_id}", "purpose": "Aggregate patient prescriptions from OPD + Saranam plan-of-care (UUID patient_id); 500 on error"},
+    {"method": "GET", "path": "/api/inventory/dispensing", "purpose": "List dispensing records (page, per_page, patient_id, medicine_id); returns {dispensing_records,total,page,per_page,pages}"},
+    {"method": "POST", "path": "/api/inventory/dispensing/dispense", "purpose": "Process dispensing (dispense permission); DispenseCreateSchema requires patient_id, medicine_id, dispensed_quantity>0, dispensed_from_location"},
+    {"method": "POST", "path": "/api/inventory/dispensing/validate-prescription", "purpose": "Validate prescription (dispense)"},
+    {"method": "GET", "path": "/api/inventory/dispensing/check-availability", "purpose": "Check availability (read); requires medicine_id, location_id, quantity>0 else 400"},
+    {"method": "GET", "path": "/api/inventory/dispensing/{id}", "purpose": "Get dispensing record by id (404 if not found)"},
+    {"method": "POST", "path": "/api/inventory/dispensing/{id}/return", "purpose": "Return dispensed medicine (dispense); body {item_id, return_quantity, reason}"},
+    {"method": "GET", "path": "/api/inventory/dispensing/history/{patient_id}", "purpose": "Get a patient's dispensing history"},
+    {"method": "GET", "path": "/api/inventory/alerts", "purpose": "List stock alerts (type, status default active, severity); returns array (UI reads response.data.alerts)"},
+    {"method": "POST", "path": "/api/inventory/alerts/generate", "purpose": "Run all alert checks (manage)"},
+    {"method": "POST", "path": "/api/inventory/alerts/{id}/acknowledge", "purpose": "Acknowledge alert (write); 404 if not found"},
+    {"method": "POST", "path": "/api/inventory/alerts/{id}/resolve", "purpose": "Resolve alert (write); body {notes/resolution_notes}; 404 if not found"},
+    {"method": "GET", "path": "/api/inventory/analytics/kpis", "purpose": "Inventory turnover/KPIs (read); used by Dispensing Dashboard stat cards"},
+    {"method": "GET", "path": "/api/inventory/analytics/stock-summary", "purpose": "Dashboard stats (read)"},
+    {"method": "GET", "path": "/api/inventory/provider-stock/locations", "purpose": "List provider stock locations with summary (read)"},
+    {"method": "GET", "path": "/api/inventory/provider-stock/{provider_id}", "purpose": "Get a provider's stock items (read)"},
+    {"method": "POST", "path": "/api/inventory/provider-stock/{provider_id}/setup", "purpose": "Create a provider stock location (write); 400 ValueError"},
+    {"method": "POST", "path": "/api/inventory/provider-stock/{provider_id}/assign", "purpose": "Assign stock to provider (write); backend reads medicine_id, quantity, from_location_id (KeyError -> 400)"},
+    {"method": "POST", "path": "/api/inventory/provider-stock/{provider_id}/return", "purpose": "Return stock from provider (write); backend reads medicine_id, quantity, to_location_id (KeyError -> 400)"}
+  ],
+  "test_data_setup": [
+    "At least 3 user accounts mapped to backend roles: an 'admin' (all permissions), a 'data_entry' user (read+write+dispense, NO approve/manage), and a 'viewer' user (read-only). Confirm each can log in to https://saranam.fieldintel.ai.",
+    "Master medicines seeded, e.g. Paracetamol 500mg Tablet (generic Acetaminophen, brand Crocin, GST 12%, HSN 30049099), Amoxicillin 500mg Capsule, Morphine 10mg Injection (Schedule X / narcotic), ORS Sachet. Note one medicine name for duplicate testing.",
+    "At least 2 active inventory locations of non-provider type, e.g. 'Central Store' (central_store) and 'Saranam Pharmacy' (pharmacy), each with stock on hand.",
+    "At least 2 active suppliers, one flagged preferred with a rating and delivery_lead_days, e.g. 'MedPlus Distributors' and 'Apollo Pharmacy Supplies', GST/PAN populated.",
+    "Stock with batches across statuses: an OPTIMAL item, a LOW item, a CRITICAL/out-of-stock item, an OVERSTOCKED item; batches with varying expiry: one expired (past), one near-expiry (<30 days, e.g. 2026-06-20), one mid (<90 days), one healthy (>90 days). Use realistic batch numbers e.g. BATCH-PCM-2401, AMX-2403, MOR-2312.",
+    "At least one PO in each status: draft, pending_approval, approved, partial_received, received, cancelled (create as needed). Capture their ids and po_number values.",
+    "A Saranam/OPD patient with at least one active prescription / plan-of-care containing medications with pending quantities (for the prescription dispensing path), plus a patient with NO prescriptions (empty-state path). Capture patient ids (UUID).",
+    "At least one existing dispensing record (with at least one returnable item) to exercise the detail/return flow; capture its id.",
+    "At least one active alert per type if possible (low_stock, out_of_stock, near_expiry, expired) in active/acknowledged/resolved states; otherwise run POST /alerts/generate as admin to populate.",
+    "At least one provider already set up under Provider Stock with some assigned stock, plus a valid provider UUID to use for the 'Setup New Provider' flow.",
+    "Browser DevTools (Network + Console) available for API verification; a spare invalid/expired token to simulate 401."
+  ],
+  "test_cases": [
+    {
+      "id": "INV-001",
+      "section": "Dashboard",
+      "title": "Inventory Dashboard loads with all six KPI stat cards",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Logged in as admin; seed data present.",
+      "steps": [
+        "Navigate to /inventory.",
+        "Observe the spinner 'Loading inventory...' then the loaded dashboard.",
+        "Verify the six stat cards render: Total Medicines, Stock Locations, Total Stock Value, Low Stock Items, Expiring Soon, Active Suppliers."
+      ],
+      "test_data": "N/A",
+      "expected_result": "All six cards render with numeric values. Total Stock Value is formatted with ₹ and Indian grouping. Values are derived from getMedicines, getLocations, getStock, getSuppliers, getBatches calls.",
+      "api_reference": "GET /api/inventory/medicines, GET /api/inventory/locations, GET /api/inventory/stock, GET /api/inventory/suppliers, GET /api/inventory/batches"
+    },
+    {
+      "id": "INV-002",
+      "section": "Dashboard",
+      "title": "Dashboard low-stock and expiring-soon alert styling",
+      "priority": "Medium",
+      "type": "UI/UX",
+      "preconditions": "Seed data has at least one LOW/CRITICAL stock item and at least one batch expiring within 90 days.",
+      "steps": [
+        "Open /inventory.",
+        "Inspect the 'Low Stock Items' and 'Expiring Soon' cards."
+      ],
+      "test_data": "N/A",
+      "expected_result": "When value > 0 the card shows a red ring (ring-2 ring-red-200) and a pulsing red dot. Low Stock counts items with stock_status StockStatus.LOW or StockStatus.CRITICAL; Expiring Soon counts batches with days_to_expiry between 1 and 89.",
+      "api_reference": "GET /api/inventory/stock, GET /api/inventory/batches"
+    },
+    {
+      "id": "INV-003",
+      "section": "Dashboard",
+      "title": "Dashboard stat-card links navigate to correct screens",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "On /inventory click 'Total Medicines' card -> expect /inventory/medicines.",
+        "Back. Click 'Stock Locations', 'Total Stock Value', 'Low Stock Items', 'Expiring Soon' -> each routes to /inventory/stock.",
+        "Back. Click 'Active Suppliers' -> expect /inventory/purchase-orders."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Each card navigates to its configured href without error.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-004",
+      "section": "Dashboard",
+      "title": "Quick Actions and Module cards navigation",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Click Quick Action 'New Medicine' -> /inventory/medicines.",
+        "Click 'Purchase Order' -> /inventory/purchase-orders/new.",
+        "Click 'Dispense' -> /inventory/dispense.",
+        "Click 'Stock Report' -> /inventory/stock.",
+        "Click each of the 4 Module cards and confirm correct route."
+      ],
+      "test_data": "N/A",
+      "expected_result": "All Quick Action and Module links route correctly.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-005",
+      "section": "Dashboard",
+      "title": "Dashboard Refresh button re-fetches stats",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Logged in as admin; DevTools Network open.",
+      "steps": [
+        "Open /inventory.",
+        "Click the Refresh (circular arrow) button top-right.",
+        "Watch the Network tab."
+      ],
+      "test_data": "N/A",
+      "expected_result": "The five parallel GET calls fire again and the cards re-render with current data; brief loading spinner is acceptable.",
+      "api_reference": "GET /api/inventory/medicines, GET /api/inventory/locations, GET /api/inventory/stock, GET /api/inventory/suppliers, GET /api/inventory/batches"
+    },
+    {
+      "id": "INV-006",
+      "section": "Dashboard",
+      "title": "Dashboard resilient when an underlying API errors",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "Ability to force a 500 on one of the dashboard calls (e.g. block /inventory/batches in DevTools).",
+      "steps": [
+        "Block or fail one of the five dashboard requests.",
+        "Reload /inventory."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Because all five are awaited in a single Promise.all, a single failure causes the catch branch: stats stay at defaults (zeros) and an error is logged to console; the page still renders without crashing (no white screen).",
+      "api_reference": "GET /api/inventory/batches"
+    },
+    {
+      "id": "INV-007",
+      "section": "Medicines Master",
+      "title": "Medicines list loads with header count and table columns",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Logged in as admin; medicines seeded.",
+      "steps": [
+        "Navigate to /inventory/medicines.",
+        "Verify header shows 'Medicine Master' and a subtitle '<total> medicines'.",
+        "Verify columns: Code, Medicine Name, Generic, Brand, Strength, Form, Category, Status, Actions."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Table lists medicines (25 per page). Form badge strips the 'DosageForm.' prefix. Status shows 'Essential' or 'Non-Essential'. Subtitle equals API total.",
+      "api_reference": "GET /api/inventory/medicines?page=1&per_page=25"
+    },
+    {
+      "id": "INV-008",
+      "section": "Medicines Master",
+      "title": "Medicine search filters list and resets to page 1",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "At least 2 distinct medicines seeded.",
+      "steps": [
+        "On /inventory/medicines navigate to page 2 (if available).",
+        "Type 'Paracetamol' into the search box.",
+        "Observe the table and watch Network."
+      ],
+      "test_data": "Search: Paracetamol",
+      "expected_result": "On each keystroke the list re-fetches with search=Paracetamol and page resets to 1; only matching medicines show.",
+      "api_reference": "GET /api/inventory/medicines?page=1&per_page=25&search=Paracetamol"
+    },
+    {
+      "id": "INV-009",
+      "section": "Medicines Master",
+      "title": "Medicines empty state when no match found",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Search for a string that matches nothing, e.g. 'zzzznomatch'.",
+        "Wait for the result."
+      ],
+      "test_data": "Search: zzzznomatch",
+      "expected_result": "Table body shows the centered Pill icon with 'No medicines found'. Pagination is hidden.",
+      "api_reference": "GET /api/inventory/medicines?search=zzzznomatch"
+    },
+    {
+      "id": "INV-010",
+      "section": "Medicines Master",
+      "title": "Medicines pagination Prev/Next behaviour",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "More than 25 medicines exist (total > 25).",
+      "steps": [
+        "Open /inventory/medicines.",
+        "Confirm 'Page 1 of N (total)' footer is shown and Prev is disabled.",
+        "Click Next; confirm page increments and data changes.",
+        "On the last page confirm Next is disabled."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Prev disabled on page 1; Next disabled on last page; page label and totals are accurate; totalPages = ceil(total/25).",
+      "api_reference": "GET /api/inventory/medicines?page=2&per_page=25"
+    },
+    {
+      "id": "INV-011",
+      "section": "Medicines Master",
+      "title": "Add Medicine dialog opens with default form values",
+      "priority": "Medium",
+      "type": "UI/UX",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Click 'Add Medicine'.",
+        "Inspect the dialog field defaults."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Dialog titled 'Add New Medicine' opens; defaults: dosage_form Tablet, unit Tablets, pack_size 10, drug schedule H, NLEM P, storage Room Temperature (15-25°C), GST 12, Generic and Essential checked. Required markers (*) on Medicine Name and Generic Name.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-012",
+      "section": "Medicines Master",
+      "title": "Create medicine with all valid fields",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Logged in as admin (write permission).",
+      "steps": [
+        "Open Add Medicine dialog.",
+        "Fill: Medicine Name 'Amoxicillin', Generic 'Amoxicillin', Brand 'Mox', Manufacturer 'Cipla', Dosage Form Capsule, Strength '500mg', Unit 'Capsules', Pack Size 10, Category 'Antibiotics', Schedule H, HSN '30049099', GST 12, Storage Room Temperature.",
+        "Click Create."
+      ],
+      "test_data": "Amoxicillin 500mg Capsule, GST 12%, HSN 30049099",
+      "expected_result": "POST returns 201; dialog closes; green success banner 'Medicine created' (auto-hides after 3s); list refreshes and shows the new medicine with an auto-generated code.",
+      "api_reference": "POST /api/inventory/medicines"
+    },
+    {
+      "id": "INV-013",
+      "section": "Medicines Master",
+      "title": "Create medicine blocked when required names missing (client validation)",
+      "priority": "High",
+      "type": "Validation",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Open Add Medicine dialog.",
+        "Leave Medicine Name and Generic Name blank, fill other fields.",
+        "Click Create."
+      ],
+      "test_data": "Medicine Name = blank, Generic Name = blank",
+      "expected_result": "Inline red banner 'Medicine name and generic name are required'; no POST request is sent; dialog stays open.",
+      "api_reference": "N/A (client-side guard before POST /api/inventory/medicines)"
+    },
+    {
+      "id": "INV-014",
+      "section": "Medicines Master",
+      "title": "Create medicine - server validation (422) on over-length / invalid values",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Logged in as admin; use DevTools to inspect response.",
+      "steps": [
+        "Open Add Medicine dialog.",
+        "Enter a Medicine Name longer than 200 characters and a GST % of 250.",
+        "Click Create."
+      ],
+      "test_data": "medicine_name = 250-char string, gst_percentage = 250",
+      "expected_result": "Backend returns 422 with {message:'Validation error', errors:{...}} (Length max 200 / Range max 100). UI shows the server message text in the red banner; record not created.",
+      "api_reference": "POST /api/inventory/medicines -> 422"
+    },
+    {
+      "id": "INV-015",
+      "section": "Medicines Master",
+      "title": "Create duplicate medicine returns 400 ValueError",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "A medicine with a known name/code already exists.",
+      "steps": [
+        "Open Add Medicine dialog.",
+        "Enter the same identifying details as an existing medicine.",
+        "Click Create."
+      ],
+      "test_data": "Duplicate of an existing seeded medicine",
+      "expected_result": "If the service raises ValueError for duplicate, backend returns 400 with a message; UI shows that message in the red banner and does not add a duplicate row.",
+      "api_reference": "POST /api/inventory/medicines -> 400"
+    },
+    {
+      "id": "INV-016",
+      "section": "Medicines Master",
+      "title": "Edit existing medicine pre-populates form and updates",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "At least one medicine exists; logged in as admin.",
+      "steps": [
+        "Click the pencil (Edit) icon on a medicine row.",
+        "Confirm dialog title 'Edit Medicine' and pre-filled values (drug_class and dosage_form have prefixes stripped/lowercased).",
+        "Change Strength to '650mg' and toggle Essential off.",
+        "Click Update."
+      ],
+      "test_data": "Strength: 650mg; Essential: unchecked",
+      "expected_result": "PUT returns 200; success banner 'Medicine updated'; list reflects the new strength and Non-Essential status.",
+      "api_reference": "PUT /api/inventory/medicines/{id}"
+    },
+    {
+      "id": "INV-017",
+      "section": "Medicines Master",
+      "title": "Delete (deactivate) medicine with confirmation",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Logged in as admin (manage permission required for delete).",
+      "steps": [
+        "Click the trash (Delete) icon on a medicine row.",
+        "Confirm the browser confirm dialog 'Delete this medicine?'.",
+        "Observe the list."
+      ],
+      "test_data": "N/A",
+      "expected_result": "DELETE returns 200 'Medicine deactivated successfully'; success banner 'Deleted'; the medicine drops out of the active list (deactivated, not hard-deleted).",
+      "api_reference": "DELETE /api/inventory/medicines/{id}"
+    },
+    {
+      "id": "INV-018",
+      "section": "Medicines Master",
+      "title": "Cancel delete confirmation keeps medicine",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Click the trash icon on a medicine row.",
+        "Click Cancel on the confirm dialog."
+      ],
+      "test_data": "N/A",
+      "expected_result": "No DELETE request is sent; medicine remains in the list.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-019",
+      "section": "Medicines Master",
+      "title": "Add/Edit dialog dismissal via overlay, X and Cancel",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Open Add Medicine; click the dark overlay outside the card -> dialog closes.",
+        "Re-open; click the X icon -> closes.",
+        "Re-open; click Cancel -> closes. Confirm clicks inside the card do NOT close it."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Dialog closes on overlay/X/Cancel and form resets to defaults; clicking inside the card does not close it (stopPropagation).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-020",
+      "section": "Medicines Master",
+      "title": "Pack Size / GST numeric coercion in form",
+      "priority": "Low",
+      "type": "Validation",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Open Add Medicine; clear Pack Size and type letters; clear GST and type letters.",
+        "Observe field values."
+      ],
+      "test_data": "Pack Size: abc; GST: xyz",
+      "expected_result": "Non-numeric input resolves to 0 (parseInt/parseFloat fallback). Pack Size of 0 will later fail backend Range(min=1) returning 422 if submitted.",
+      "api_reference": "POST /api/inventory/medicines -> 422 (pack_size min 1)"
+    },
+    {
+      "id": "INV-021",
+      "section": "Medicines Master",
+      "title": "Viewer role cannot create/edit/delete medicines (403)",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Logged in as the viewer (read-only) user.",
+      "steps": [
+        "Open /inventory/medicines (should load).",
+        "Open Add Medicine and attempt to Create a valid medicine; watch the API response.",
+        "Attempt Edit and Delete on a row."
+      ],
+      "test_data": "Any valid medicine payload",
+      "expected_result": "List GET succeeds (read). Create/Update return 403 'Insufficient permissions. Required: write'; Delete returns 403 'Required: manage'. UI shows the server message in the red banner; no data change.",
+      "api_reference": "POST/PUT/DELETE /api/inventory/medicines -> 403"
+    },
+    {
+      "id": "INV-022",
+      "section": "Stock Management",
+      "title": "Stock Management list loads with all columns",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Logged in as admin; stock seeded.",
+      "steps": [
+        "Navigate to /inventory/stock.",
+        "Verify a linear loading bar then the table with columns: Medicine, Location, Current Stock, PAR Level, Reorder Level, Stock Level, Category, Value, Status."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Rows render with medicine name+generic, location, numeric quantities, a stock-level progress bar, matrix category chip, ₹ value, and a status chip (Optimal/Low/Critical/Overstocked with prefix stripped).",
+      "api_reference": "GET /api/inventory/stock?page=1&per_page=25"
+    },
+    {
+      "id": "INV-023",
+      "section": "Stock Management",
+      "title": "Filter stock by Location",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "At least 2 locations with stock.",
+      "steps": [
+        "On /inventory/stock open 'Filter by Location' dropdown (populated from getLocations).",
+        "Select 'Central Store'.",
+        "Watch the Network call and table."
+      ],
+      "test_data": "Location: Central Store",
+      "expected_result": "List re-fetches with location_id=<id>; only that location's stock shows. 'All Locations' clears the filter.",
+      "api_reference": "GET /api/inventory/stock?location_id={id}, GET /api/inventory/locations"
+    },
+    {
+      "id": "INV-024",
+      "section": "Stock Management",
+      "title": "Filter stock by Status",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Stock exists across statuses.",
+      "steps": [
+        "Select 'Filter by Status' = Low Stock.",
+        "Repeat for Critical, Optimal, Overstocked, and All Status."
+      ],
+      "test_data": "Status: LOW / CRITICAL / OPTIMAL / OVERSTOCKED",
+      "expected_result": "Each selection re-fetches with status=<value> and only matching rows display; All Status clears it.",
+      "api_reference": "GET /api/inventory/stock?status=LOW"
+    },
+    {
+      "id": "INV-025",
+      "section": "Stock Management",
+      "title": "Stock-level progress bar colour thresholds",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Stock rows with varying current vs PAR.",
+      "steps": [
+        "Inspect a row where current/PAR < 25% (bar red), one 25-50% (warning/amber), and one >=50% (green)."
+      ],
+      "test_data": "N/A",
+      "expected_result": "getStockLevel = min(current/PAR*100, 200); bar value capped at 100; colour error <25, warning <50, else success. Percentage label matches.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-026",
+      "section": "Stock Management",
+      "title": "Stock pagination control (client count caveat)",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "More than one page of stock would exist server-side.",
+      "steps": [
+        "On /inventory/stock change Rows per page to 10.",
+        "Use the TablePagination next-page arrow.",
+        "Compare displayed count with actual data."
+      ],
+      "test_data": "Rows per page: 10",
+      "expected_result": "Changing rows-per-page resets page to 0 and re-fetches with the new per_page. NOTE/DEFECT-WATCH: pagination count is bound to the current page's array length (stockItems.length), not a server total, so the total-records label and last-page detection may be inaccurate. Log as a defect if next page returns empty unexpectedly.",
+      "api_reference": "GET /api/inventory/stock?page=2&per_page=10"
+    },
+    {
+      "id": "INV-027",
+      "section": "Stock Management",
+      "title": "Stock empty state and API error banner",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Filter combination that yields no rows; ability to force an error.",
+      "steps": [
+        "Apply a location+status filter combination that returns no rows -> expect 'No stock items found'.",
+        "Force /inventory/stock to fail (block in DevTools) and refresh -> expect the error Alert."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Empty state row 'No stock items found'; on failure a dismissible red Alert 'Failed to load stock items' appears.",
+      "api_reference": "GET /api/inventory/stock"
+    },
+    {
+      "id": "INV-028",
+      "section": "Stock Management",
+      "title": "Stock value currency formatting",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Stock with non-zero total_value.",
+      "steps": [
+        "Inspect the Value column for a high-value row."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Value shows as ₹ with en-IN grouping and exactly two decimals (e.g. ₹1,25,000.00).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-029",
+      "section": "Purchase Orders",
+      "title": "PO list loads with columns and status badges",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "At least one PO exists; logged in as admin.",
+      "steps": [
+        "Navigate to /inventory/purchase-orders.",
+        "Verify columns: PO Number, Date, Supplier, Expected Delivery, Total Amount, Status, Actions.",
+        "Verify status badges use the correct colour/label mapping (Draft, Pending Approval, Approved, Sent to Supplier, Partially Received, Received, Cancelled)."
+      ],
+      "test_data": "N/A",
+      "expected_result": "POs list (20/page); dates formatted dd MMM yyyy; total amount with ₹ en-IN 2-dp; badge label/colour matches status.",
+      "api_reference": "GET /api/inventory/purchase-orders?page=1&per_page=20"
+    },
+    {
+      "id": "INV-030",
+      "section": "Purchase Orders",
+      "title": "PO list status filter triggers server re-fetch",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "POs in various statuses.",
+      "steps": [
+        "Open the 'Filter by status' Select and choose 'Approved'.",
+        "Watch the Network request.",
+        "Choose 'All Status'."
+      ],
+      "test_data": "Status: approved",
+      "expected_result": "Selecting a status re-fetches with status=approved; only approved POs show. 'All Status' (value 'all') is treated as no filter.",
+      "api_reference": "GET /api/inventory/purchase-orders?status=approved"
+    },
+    {
+      "id": "INV-031",
+      "section": "Purchase Orders",
+      "title": "PO list search is client-side (current page only)",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "Multiple POs across pages.",
+      "steps": [
+        "Type a PO number or supplier name in the search box.",
+        "Observe filtering."
+      ],
+      "test_data": "Search: PO-2026 or supplier name",
+      "expected_result": "Filtering happens in the browser over the already-loaded 20 records (po_number or supplier.supplier_name). DEFECT-WATCH: a PO on another page will not be found via search since search does not call the API.",
+      "api_reference": "N/A (client-side filter)"
+    },
+    {
+      "id": "INV-032",
+      "section": "Purchase Orders",
+      "title": "PO list empty state and 'Create Your First PO'",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "A status filter that returns zero POs, or no POs at all.",
+      "steps": [
+        "Filter by a status that has no POs (e.g. cancelled when none cancelled).",
+        "Observe empty state."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Centered FileText icon, 'No purchase orders found', and a 'Create Your First PO' button routing to /inventory/purchase-orders/new.",
+      "api_reference": "GET /api/inventory/purchase-orders?status=cancelled"
+    },
+    {
+      "id": "INV-033",
+      "section": "Purchase Orders",
+      "title": "PO list pagination and skeleton loading",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "More than 20 POs exist.",
+      "steps": [
+        "Open /inventory/purchase-orders and observe skeleton rows during load.",
+        "If pages > 1, click Next and Previous; verify disabled states at boundaries."
+      ],
+      "test_data": "N/A",
+      "expected_result": "5 skeleton bars show while loading; pagination shows 'Page X of N'; Previous disabled on page 1, Next disabled on last page (totalPages from response.pages).",
+      "api_reference": "GET /api/inventory/purchase-orders?page=2"
+    },
+    {
+      "id": "INV-034",
+      "section": "Purchase Orders",
+      "title": "PO Wizard Step 1 required-field validation",
+      "priority": "High",
+      "type": "Validation",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Open /inventory/purchase-orders/new.",
+        "On Step 1 (Basic Information) click Next without selecting supplier, date, or location."
+      ],
+      "test_data": "All Step 1 fields empty",
+      "expected_result": "Inline errors: 'Supplier is required', 'Expected delivery date is required', 'Delivery location is required'; wizard stays on Step 1; date field border turns red.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-035",
+      "section": "Purchase Orders",
+      "title": "PO Wizard Step 1 - SupplierSelector search and selection",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "At least 2 suppliers, one preferred.",
+      "steps": [
+        "Open the Supplier dropdown; type part of a supplier name in the in-dropdown search.",
+        "Select a supplier.",
+        "Confirm the details panel (Contact/Email/Lead Time/Payment) appears."
+      ],
+      "test_data": "Supplier: MedPlus Distributors",
+      "expected_result": "Suppliers load sorted preferred-first then by rating; search filters by supplier_name/company_name; selecting shows a 'Preferred' badge if applicable and the details card.",
+      "api_reference": "GET /api/inventory/suppliers?is_active=true"
+    },
+    {
+      "id": "INV-036",
+      "section": "Purchase Orders",
+      "title": "PO Wizard Step 1 - Expected delivery date cannot be in the past",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Logged in as admin; today is 2026-06-01.",
+      "steps": [
+        "Open the Expected Delivery Date calendar popover.",
+        "Attempt to select a date before today."
+      ],
+      "test_data": "Date < 2026-06-01",
+      "expected_result": "Past dates are disabled (date < new Date()); only today or future dates can be picked.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-037",
+      "section": "Purchase Orders",
+      "title": "PO Wizard Step 1 - LocationSelector lists active locations with type badges",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Active locations exist.",
+      "steps": [
+        "Open the Delivery Location dropdown.",
+        "Select a location."
+      ],
+      "test_data": "Location: Central Store",
+      "expected_result": "Locations load (is_active true); each shows a coloured type badge (Central Store/Pharmacy/etc.) and building/floor/room if present; selection shows the summary panel.",
+      "api_reference": "GET /api/inventory/locations?is_active=true"
+    },
+    {
+      "id": "INV-038",
+      "section": "Purchase Orders",
+      "title": "PO Wizard Step 2 requires at least one item",
+      "priority": "High",
+      "type": "Validation",
+      "preconditions": "Step 1 completed.",
+      "steps": [
+        "Advance to Step 2 (Add Items) with no items added.",
+        "Click Next."
+      ],
+      "test_data": "items = []",
+      "expected_result": "Error 'Please add at least one item to the purchase order'; the POItemsTable empty state shows; cannot proceed.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-039",
+      "section": "Purchase Orders",
+      "title": "PO Wizard Step 2 - POItemsTable medicine search and add",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Medicines seeded.",
+      "steps": [
+        "On Step 2 click 'Add Medicine' to reveal the search card.",
+        "Type at least 3 characters of a medicine name.",
+        "Click a result to add it as a row."
+      ],
+      "test_data": "Search: Paracetamol (>=3 chars)",
+      "expected_result": "Search fires only when length > 2; results show name/generic/dosage_form/strength; clicking adds a row defaulting qty 1, unit_price 0, tax_percentage = medicine.gst_percentage; search card closes.",
+      "api_reference": "GET /api/inventory/medicines/search?q=Paracetamol&limit=20"
+    },
+    {
+      "id": "INV-040",
+      "section": "Purchase Orders",
+      "title": "PO Wizard Step 2 - duplicate medicine guard",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "One item already added.",
+      "steps": [
+        "Add a medicine, then 'Add Medicine' again and select the same medicine."
+      ],
+      "test_data": "Same medicine twice",
+      "expected_result": "Native alert 'This medicine is already added to the order'; no duplicate row created.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-041",
+      "section": "Purchase Orders",
+      "title": "PO Wizard Step 2 - per-item total and grand total math",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "At least one item added.",
+      "steps": [
+        "Set Quantity 100, Unit Price 2.50, Discount 10%, Tax 12%.",
+        "Verify the row Total and the Grand Total."
+      ],
+      "test_data": "Qty 100, Unit ₹2.50, Disc 10%, Tax 12%",
+      "expected_result": "Subtotal 250.00, discount 25.00, taxable 225.00, tax 27.00, line total ₹252.00; Grand Total sums all line totals (₹252.00 for one item).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-042",
+      "section": "Purchase Orders",
+      "title": "PO Wizard Step 2 - remove item",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Two items added.",
+      "steps": [
+        "Click the trash icon on one row."
+      ],
+      "test_data": "N/A",
+      "expected_result": "That row is removed; grand total recalculates; remaining item stays.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-043",
+      "section": "Purchase Orders",
+      "title": "PO Wizard Step 2 - item quantity/price edge values",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "One item added.",
+      "steps": [
+        "Set Quantity to 0, then to a negative number, then a non-numeric character.",
+        "Set Discount to 150% and Tax to -5%.",
+        "Observe totals and whether Next is allowed."
+      ],
+      "test_data": "Qty 0/-1/abc; Discount 150; Tax -5",
+      "expected_result": "Inputs have min/max attributes (qty min 1, discount/tax 0-100) but the UI does not hard-block typing other values; totals compute from parsed floats (0 for blanks). Wizard allows advancing (only count>0 is checked). DEFECT-WATCH: a 0 or negative quantity will be rejected by the backend on submit (ordered_quantity Range min>0) returning 422.",
+      "api_reference": "POST /api/inventory/purchase-orders -> 422 on submit"
+    },
+    {
+      "id": "INV-044",
+      "section": "Purchase Orders",
+      "title": "PO Wizard Step 3 review summary accuracy",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Steps 1-2 completed with valid data.",
+      "steps": [
+        "Advance to Step 3 (Review & Submit).",
+        "Verify Order Summary (supplier, expected delivery, location, total items) and the Items table and Financial Summary (subtotal/discount/tax/total)."
+      ],
+      "test_data": "N/A",
+      "expected_result": "All summary values match Step 1/2 inputs; financial totals equal the computed subtotal/discount/tax/total.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-045",
+      "section": "Purchase Orders",
+      "title": "PO Wizard submit creates PO and redirects to detail",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Steps 1-2 valid; logged in as admin.",
+      "steps": [
+        "On Step 3 click 'Create Purchase Order'.",
+        "Watch the request payload and the redirect."
+      ],
+      "test_data": "Valid PO with 1+ items",
+      "expected_result": "POST sends supplier_id, po_date (today), expected_delivery_date (yyyy-MM-dd), delivery_location_id, notes, computed totals, status 'draft', and items[] each {medicine_id, ordered_quantity, unit_price, discount_percentage, tax_percentage, total_amount}. Returns 201; app navigates to /inventory/purchase-orders/{new id}.",
+      "api_reference": "POST /api/inventory/purchase-orders -> 201"
+    },
+    {
+      "id": "INV-046",
+      "section": "Purchase Orders",
+      "title": "PO Wizard submit error surfaces server message",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Force a failure (e.g. invalid supplier_id, or a 0-qty item per INV-043).",
+      "steps": [
+        "Submit a PO that the backend rejects.",
+        "Observe the error region on Step 3."
+      ],
+      "test_data": "Invalid/zero-qty payload",
+      "expected_result": "Red box at bottom of Step 3 with the server message (or 'Failed to create purchase order'); no redirect; user stays on wizard.",
+      "api_reference": "POST /api/inventory/purchase-orders -> 400/422"
+    },
+    {
+      "id": "INV-047",
+      "section": "Purchase Orders",
+      "title": "PO Wizard Back/Cancel navigation and step indicator",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "On any wizard step.",
+      "steps": [
+        "Move forward then click Back; verify data persists.",
+        "Click Cancel (or 'Back to Purchase Orders').",
+        "Observe the step progress indicator (active/completed states)."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Back returns to the prior step with entered data intact; Cancel routes to /inventory/purchase-orders; completed steps show a green check, active step highlighted.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-048",
+      "section": "Purchase Orders",
+      "title": "PO Detail view renders all sections",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "A valid PO id; logged in as admin.",
+      "steps": [
+        "Open /inventory/purchase-orders/{id} (or click the eye icon from the list).",
+        "Verify header (PO #, status badge, created date), Supplier/Delivery/Financial cards, Items table (Ordered/Received/Pending/Unit Price/Total), and Notes if present."
+      ],
+      "test_data": "Existing PO id",
+      "expected_result": "Detail loads via GET; all sections populated; skeleton shows while loading; Items table shows ordered/received/pending quantities.",
+      "api_reference": "GET /api/inventory/purchase-orders/{id}"
+    },
+    {
+      "id": "INV-049",
+      "section": "Purchase Orders",
+      "title": "PO Detail action buttons reflect status",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "POs in draft, pending_approval, approved/sent/partial_received, received and cancelled.",
+      "steps": [
+        "Open a draft PO -> expect 'Submit for Approval' button.",
+        "Open a pending_approval PO -> expect 'Approve PO'.",
+        "Open an approved/sent/partial_received PO -> expect 'Receive Goods'.",
+        "Open a received and a cancelled PO -> expect only Print (no action button)."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Action buttons are status-driven exactly as above; Print button always present.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-050",
+      "section": "Purchase Orders",
+      "title": "PO Detail approve flow",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "A pending_approval PO; logged in as admin (approve permission).",
+      "steps": [
+        "On a pending_approval PO click 'Approve PO'.",
+        "In the dialog optionally add approval notes; click 'Approve PO'.",
+        "Observe the status."
+      ],
+      "test_data": "Approval notes: 'Budget approved'",
+      "expected_result": "POST .../approve returns 200; dialog closes; PO re-fetched and status badge becomes Approved. NOTE: approval_notes entered in the dialog are not sent in the body (approvePurchaseOrder takes no payload) - log as enhancement if notes are expected to persist.",
+      "api_reference": "POST /api/inventory/purchase-orders/{id}/approve"
+    },
+    {
+      "id": "INV-051",
+      "section": "Purchase Orders",
+      "title": "PO Detail submit-for-approval (draft -> pending)",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "A draft PO; logged in as admin.",
+      "steps": [
+        "Open a draft PO; click 'Submit for Approval'.",
+        "Confirm in the dialog."
+      ],
+      "test_data": "N/A",
+      "expected_result": "DEFECT-WATCH: both draft and pending states open the same approval dialog whose confirm calls approvePurchaseOrder (not submitPurchaseOrder). Verify the resulting status transition and whether /submit is ever invoked; log a defect if a draft PO is approved directly, skipping the submit step.",
+      "api_reference": "POST /api/inventory/purchase-orders/{id}/approve (expected: /submit)"
+    },
+    {
+      "id": "INV-052",
+      "section": "Purchase Orders",
+      "title": "PO Detail Receive Goods - full receipt with batch details",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "An approved PO with 1+ items; logged in as admin/data_entry (write).",
+      "steps": [
+        "Open the PO; click 'Receive Goods'.",
+        "For each item enter Received Quantity, Batch Number, Manufacture Date, Expiry Date (expiry after mfg).",
+        "Click 'Confirm Receipt'."
+      ],
+      "test_data": "Batch BATCH-PCM-2401, Mfg 2026-01-10, Expiry 2028-01-10, Received = ordered qty",
+      "expected_result": "On success the PO status moves to received/partial_received and stock increases. DEFECT-WATCH: the dialog posts {items:[{item_id, received_quantity, batch_number, manufacture_date, expiry_date}]} but the backend GoodsReceiveSchema expects {received_items:[...]} with mrp optional. Verify whether receipt actually succeeds; a 422 'received_items required' indicates a payload-key mismatch defect.",
+      "api_reference": "POST /api/inventory/purchase-orders/{id}/receive"
+    },
+    {
+      "id": "INV-053",
+      "section": "Purchase Orders",
+      "title": "PO Receive Goods - missing batch detail blocked client-side",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Receive Goods dialog open.",
+      "steps": [
+        "Leave Batch Number (or a date) blank for one item.",
+        "Click 'Confirm Receipt'."
+      ],
+      "test_data": "Batch Number = blank",
+      "expected_result": "Native alert 'Please fill in all batch details for all items'; no API call sent. NOTE: the early return does not reset actionLoading, so the Confirm button may stay in 'Receiving...' state - log as a minor defect.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-054",
+      "section": "Purchase Orders",
+      "title": "PO Receive Goods - expiry before manufacture rejected",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Receive Goods dialog open.",
+      "steps": [
+        "Enter Manufacture Date 2027-01-01 and Expiry Date 2026-01-01 (expiry < mfg).",
+        "Note the date input min on expiry is set to manufacture_date.",
+        "Attempt to confirm."
+      ],
+      "test_data": "Mfg 2027-01-01, Expiry 2026-01-01",
+      "expected_result": "The expiry field's min attribute discourages an earlier date; if forced, backend GoodsReceiveItemSchema.validate_dates returns 422 'Expiry date must be after manufacture date'.",
+      "api_reference": "POST /api/inventory/purchase-orders/{id}/receive -> 422"
+    },
+    {
+      "id": "INV-055",
+      "section": "Purchase Orders",
+      "title": "PO Receive Goods - partial receipt updates pending",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "An approved PO with an item ordered_quantity of e.g. 100.",
+      "steps": [
+        "Open Receive Goods; set Received Quantity to 60 (less than ordered).",
+        "Enter valid batch details; confirm.",
+        "Reopen the PO detail."
+      ],
+      "test_data": "Received 60 of 100",
+      "expected_result": "If receipt succeeds, status becomes 'partial_received', the item shows Received 60 / Pending 40, and a 'Receive Goods' button remains for the balance.",
+      "api_reference": "POST /api/inventory/purchase-orders/{id}/receive"
+    },
+    {
+      "id": "INV-056",
+      "section": "Purchase Orders",
+      "title": "PO Detail not-found id",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Navigate to /inventory/purchase-orders/00000000-0000-0000-0000-000000000000."
+      ],
+      "test_data": "Non-existent PO id",
+      "expected_result": "GET returns 404; the page shows 'Purchase order not found' (po stays null after loading).",
+      "api_reference": "GET /api/inventory/purchase-orders/{bad-id} -> 404"
+    },
+    {
+      "id": "INV-057",
+      "section": "Purchase Orders",
+      "title": "data_entry role cannot approve a PO (403)",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Logged in as data_entry (read+write+dispense, no approve).",
+      "steps": [
+        "Open a pending_approval PO; click 'Approve PO' and confirm.",
+        "Watch the API response."
+      ],
+      "test_data": "N/A",
+      "expected_result": "POST .../approve returns 403 'Insufficient permissions. Required: approve'; an alert 'Failed to approve purchase order' shows; status unchanged.",
+      "api_reference": "POST /api/inventory/purchase-orders/{id}/approve -> 403"
+    },
+    {
+      "id": "INV-058",
+      "section": "Dispensing",
+      "title": "Dispensing records list default 'Today' filter and columns",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "At least one dispensing record today; logged in as admin.",
+      "steps": [
+        "Navigate to /inventory/dispense.",
+        "Confirm default date filter is 'Today' and columns: Date & Time, Patient, Medicines, Type, Dispensed By, Actions."
+      ],
+      "test_data": "N/A",
+      "expected_result": "List loads with start_date and end_date both = today; rows show patient name/ABHA, item count badge + first 2 medicine names, type badge, dispenser; row click opens detail.",
+      "api_reference": "GET /api/inventory/dispensing?page=1&per_page=20&start_date={today}&end_date={today}"
+    },
+    {
+      "id": "INV-059",
+      "section": "Dispensing",
+      "title": "Dispensing list type and date-range filters",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Records of various types and dates exist.",
+      "steps": [
+        "Change Type filter to Prescription, Direct, Emergency, OTC.",
+        "Change Date Range to Last 7 Days, Last Month, All Time.",
+        "Watch the requests."
+      ],
+      "test_data": "Type: prescription; Date: week/month/all",
+      "expected_result": "Type sends dispense_type=<value>; date ranges send computed start_date/end_date (All Time sends none). 'All Types' clears the type filter.",
+      "api_reference": "GET /api/inventory/dispensing?dispense_type=prescription&start_date=...&end_date=..."
+    },
+    {
+      "id": "INV-060",
+      "section": "Dispensing",
+      "title": "Dispensing list client-side search by patient/ABHA/dispenser",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "Multiple records loaded.",
+      "steps": [
+        "Type a patient name, then an ABHA address, then a dispenser name in the search box."
+      ],
+      "test_data": "Search: patient name / ABHA / dispenser",
+      "expected_result": "Filtering is client-side over the current page only (patient.full_name, patient.abha_address, dispensed_by). DEFECT-WATCH: records on other pages won't match.",
+      "api_reference": "N/A (client-side filter)"
+    },
+    {
+      "id": "INV-061",
+      "section": "Dispensing",
+      "title": "Dispensing list empty state",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "A filter combination with no records (e.g. Today with no dispensing).",
+      "steps": [
+        "Set Date Range = Today on a day with no dispensing."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Centered FileText icon, 'No dispensing records found', and a 'Dispense Medicines' button to /inventory/dispense/new.",
+      "api_reference": "GET /api/inventory/dispensing"
+    },
+    {
+      "id": "INV-062",
+      "section": "Dispensing",
+      "title": "Dispensing Wizard Step 1 - patient required",
+      "priority": "High",
+      "type": "Validation",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Open /inventory/dispense/new.",
+        "On Step 1 click Next without selecting a patient."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Error 'Patient is required'; the search input border turns red; cannot advance.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-063",
+      "section": "Dispensing",
+      "title": "Dispensing Wizard Step 1 - PatientSelector recent + search",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Recent patients exist; a searchable patient exists.",
+      "steps": [
+        "On Step 1 observe 'Recent Patients' list (loaded on mount).",
+        "Type >2 chars in the search to search patients.",
+        "Select a patient; confirm the selected-patient card with a 'Change' link."
+      ],
+      "test_data": "Search: a known patient name (>=3 chars)",
+      "expected_result": "Recent patients load via patients API; search fires only when length > 2; selecting shows the patient card (name, ABHA, age from DOB, phone, location) and 'Change' clears it.",
+      "api_reference": "GET patients recent + GET patients search (patients API)"
+    },
+    {
+      "id": "INV-064",
+      "section": "Dispensing",
+      "title": "Dispensing Wizard Step 2 - prescription path loads patient prescriptions",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Selected patient has at least one OPD/Saranam prescription with pending items.",
+      "steps": [
+        "Advance to Step 2; keep the 'From Prescription' tab.",
+        "Verify prescriptions render with source badge (OPD/SARANAM_VISIT), status, prescriber, date and medication list with Qty/Dispensed/Pending.",
+        "Click a prescription card to select it."
+      ],
+      "test_data": "Patient with active prescription",
+      "expected_result": "GET prescriptions returns the list; selecting maps medications into items (qty defaults to pending_quantity); the card highlights with 'Selected for Dispensing'.",
+      "api_reference": "GET /api/inventory/prescriptions/patient/{patient_id}"
+    },
+    {
+      "id": "INV-065",
+      "section": "Dispensing",
+      "title": "Dispensing Wizard Step 2 - prescription empty state",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Selected patient has NO prescriptions.",
+      "steps": [
+        "Select a patient with no prescriptions and advance to Step 2 'From Prescription'."
+      ],
+      "test_data": "Patient with no prescriptions",
+      "expected_result": "PrescriptionSelector shows 'No active prescriptions found / This patient has no pending prescriptions to dispense'.",
+      "api_reference": "GET /api/inventory/prescriptions/patient/{patient_id}"
+    },
+    {
+      "id": "INV-066",
+      "section": "Dispensing",
+      "title": "Dispensing Wizard Step 2 - Direct Dispense (QuickDispenseSelector)",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Medicines seeded.",
+      "steps": [
+        "On Step 2 switch to the 'Direct Dispense' tab.",
+        "Click 'Add Medicine', search (>2 chars), and add a medicine.",
+        "Set a quantity and enter instructions."
+      ],
+      "test_data": "Medicine Paracetamol, Qty 5, Instructions '1-0-1 x 5 days'",
+      "expected_result": "Search uses medicines/search; adding sets dispense_type 'direct' and an item with qty 1 default; a yellow Direct Dispensing warning banner shows; duplicate add is blocked with an alert.",
+      "api_reference": "GET /api/inventory/medicines/search?q=Paracetamol&limit=20"
+    },
+    {
+      "id": "INV-067",
+      "section": "Dispensing",
+      "title": "Dispensing Wizard Step 2 requires at least one item",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "On Step 2 with no prescription selected and no direct items.",
+      "steps": [
+        "Click Next without selecting a prescription or adding direct items."
+      ],
+      "test_data": "items = []",
+      "expected_result": "Error 'Please select a prescription or add medicines'; cannot advance.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-068",
+      "section": "Dispensing",
+      "title": "Dispensing Wizard Step 3 - BatchSelector FEFO auto-selection",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Selected medicine has multiple available batches with different expiry dates.",
+      "steps": [
+        "Advance to Step 3.",
+        "For each medicine confirm the Batch Selection card shows Required/Available/Selected and a batches table sorted by earliest expiry (FEFO checkbox on by default).",
+        "Verify the first batch is tagged 'Recommended' and auto-selection fills the required quantity."
+      ],
+      "test_data": "Medicine with batches expiring on different dates",
+      "expected_result": "Batches load (response.data.batches); FEFO sorts by expiry ascending; auto-select allocates from earliest-expiry batches until required qty met; expiry badges colour-coded (expired/<=30/<=90/healthy); expired rows are disabled and dimmed.",
+      "api_reference": "GET /api/inventory/batches?medicine_id={id}&available_only=true"
+    },
+    {
+      "id": "INV-069",
+      "section": "Dispensing",
+      "title": "Dispensing Wizard Step 3 - FIFO toggle re-sorts batches",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Batches with differing manufacture dates.",
+      "steps": [
+        "On Step 3 uncheck 'Use FEFO (First Expiry, First Out)'.",
+        "Click 'Auto-Select FIFO'."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Batches re-sort by manufacture_date ascending; auto-select label changes to 'Auto-Select FIFO' and allocates from oldest-manufactured batches first.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-070",
+      "section": "Dispensing",
+      "title": "Dispensing Wizard Step 3 - insufficient stock warning blocks advance",
+      "priority": "High",
+      "type": "Negative",
+      "preconditions": "Required quantity exceeds total available across batches.",
+      "steps": [
+        "Set/select a medicine quantity greater than the sum of available batch quantities.",
+        "Observe the Stock Summary and try Next."
+      ],
+      "test_data": "Required 500, Available 120",
+      "expected_result": "Red 'Insufficient Stock - Only 120 units available. 380 units short.' banner; Available shown in red; validateStep3 fails (total selected < required) -> error 'Please select batches for all medicines' and the wizard will not advance.",
+      "api_reference": "GET /api/inventory/batches?medicine_id={id}&available_only=true"
+    },
+    {
+      "id": "INV-071",
+      "section": "Dispensing",
+      "title": "Dispensing Wizard Step 3 - per-batch quantity cannot exceed batch availability",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "A batch with available_quantity e.g. 50.",
+      "steps": [
+        "In the Dispense Qty input for that batch type 999."
+      ],
+      "test_data": "Batch available 50, enter 999",
+      "expected_result": "Entered value is clamped to the batch available_quantity (Math.min). Over-selection across batches beyond Required shows the orange 'Over-Selected' banner.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-072",
+      "section": "Dispensing",
+      "title": "Dispensing Wizard Step 4 review and confirm dispense",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Steps 1-3 valid; logged in as admin/data_entry (dispense permission).",
+      "steps": [
+        "On Step 4 review Patient, Prescription (if any), Medicines with selected batches and dispense type.",
+        "Click 'Confirm & Dispense'.",
+        "Watch the payload and the redirect."
+      ],
+      "test_data": "Valid dispense with batches selected",
+      "expected_result": "On success app redirects to /inventory/dispensing/{record id}. DEFECT-WATCH: the wizard posts {patient_id, prescription_id, dispense_type, notes, items:[{medicine_id, quantity, instructions, batches:[...]}]} but DispenseCreateSchema expects a single-medicine body {patient_id, medicine_id, dispensed_quantity, dispensed_from_location, batch_id}. A 422 'Validation error' (missing medicine_id/dispensed_quantity/dispensed_from_location) indicates a payload-shape mismatch defect - verify whether dispensing actually persists.",
+      "api_reference": "POST /api/inventory/dispensing/dispense"
+    },
+    {
+      "id": "INV-073",
+      "section": "Dispensing",
+      "title": "Dispensing Wizard submit error surfaces server message",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Force a backend rejection on dispense.",
+      "steps": [
+        "Confirm & Dispense with a payload the backend rejects.",
+        "Observe Step 4."
+      ],
+      "test_data": "Rejected dispense payload",
+      "expected_result": "Red box at bottom of Step 4 shows the server message or 'Failed to dispense medicines'; no redirect.",
+      "api_reference": "POST /api/inventory/dispensing/dispense -> 400/422"
+    },
+    {
+      "id": "INV-074",
+      "section": "Dispensing",
+      "title": "Dispensing Dashboard KPIs and recent records",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Some dispensing activity today; logged in as admin.",
+      "steps": [
+        "Navigate to /inventory/dispense/dashboard.",
+        "Verify the 4 stat cards (Today's Dispensing, Patients Served, Total Items, Pending Returns) and the Recent Dispensing Records table (max 5 rows)."
+      ],
+      "test_data": "N/A",
+      "expected_result": "KPIs come from analytics/kpis (today_dispensing, patients_served_today, total_items_today, pending_returns; default 0 if absent); recent records from the dispensing list; clicking a recent row opens its detail.",
+      "api_reference": "GET /api/inventory/analytics/kpis, GET /api/inventory/dispensing?page=1&per_page=10"
+    },
+    {
+      "id": "INV-075",
+      "section": "Dispensing",
+      "title": "Dispensing Dashboard quick actions and empty state",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "No dispensing records (or fresh environment).",
+      "steps": [
+        "On /inventory/dispense/dashboard with no records, verify the empty state and the three Quick Action buttons.",
+        "Click 'New Dispensing', 'View All Records', 'Low Stock Alerts'."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Empty state 'No dispensing records yet'; Quick Actions route to /inventory/dispense/new, /inventory/dispense, /inventory/stock respectively.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-076",
+      "section": "Dispensing",
+      "title": "Dispensing Detail view renders patient/prescription/items",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "A valid dispensing record id.",
+      "steps": [
+        "Open /inventory/dispensing/{id}.",
+        "Verify Patient Information, Prescription Details (if any), Dispensing Details, and the Dispensed Medicines table (Medicine, Batch, Expiry, Dispensed Qty, Returned Qty, Instructions, Actions)."
+      ],
+      "test_data": "Existing dispensing record id",
+      "expected_result": "Record loads via GET; all cards populated; batch number and expiry shown per item; type badge in header.",
+      "api_reference": "GET /api/inventory/dispensing/{id}"
+    },
+    {
+      "id": "INV-077",
+      "section": "Dispensing",
+      "title": "Dispensing Detail - return medicine flow",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "A record with a returnable item (dispensed_quantity > returned_quantity); dispense permission.",
+      "steps": [
+        "Click 'Return' on a returnable item row.",
+        "In the dialog set a return quantity and a reason.",
+        "Click 'Confirm Return'."
+      ],
+      "test_data": "Return Qty 2, Reason 'Patient discharged'",
+      "expected_result": "POST .../return returns 200; dialog closes; record re-fetched; the item's Returned Qty badge updates. The quantity input is capped at (dispensed - already returned).",
+      "api_reference": "POST /api/inventory/dispensing/{id}/return"
+    },
+    {
+      "id": "INV-078",
+      "section": "Dispensing",
+      "title": "Dispensing Detail - return validation (reason and qty)",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Return dialog open.",
+      "steps": [
+        "Clear the reason and click Confirm Return.",
+        "Set return quantity to 0 and click Confirm Return."
+      ],
+      "test_data": "Reason blank; Qty 0",
+      "expected_result": "Alert 'Please provide a reason for return' when reason empty; alert 'Return quantity must be greater than 0' when qty <= 0; no API call. NOTE: these early returns do not reset actionLoading - watch for a stuck 'Processing...' button (minor defect).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-079",
+      "section": "Dispensing",
+      "title": "Dispensing Detail - not-found id",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Open /inventory/dispensing/00000000-0000-0000-0000-000000000000."
+      ],
+      "test_data": "Non-existent dispensing id",
+      "expected_result": "GET returns 404; the page shows 'Dispensing record not found'.",
+      "api_reference": "GET /api/inventory/dispensing/{bad-id} -> 404"
+    },
+    {
+      "id": "INV-080",
+      "section": "Dispensing",
+      "title": "Viewer role cannot dispense (403)",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Logged in as viewer (read-only).",
+      "steps": [
+        "Open the Dispensing Wizard, complete steps and click 'Confirm & Dispense'.",
+        "Watch the response."
+      ],
+      "test_data": "Valid dispense attempt",
+      "expected_result": "POST /dispensing/dispense returns 403 'Insufficient permissions. Required: dispense'; the error box shows the message; nothing is dispensed.",
+      "api_reference": "POST /api/inventory/dispensing/dispense -> 403"
+    },
+    {
+      "id": "INV-081",
+      "section": "Alerts",
+      "title": "Alerts list loads with status tabs and counts",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Active alerts exist; logged in as admin.",
+      "steps": [
+        "Navigate to /inventory/alerts.",
+        "Confirm the default tab is 'Active' and the tabs (Active/Acknowledged/Resolved/All Alerts) with count badges.",
+        "Verify each AlertCard shows type label, severity badge, message, medicine/batch/location and timestamps."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Active tab loads alerts with acknowledged=false & resolved=false; cards render correctly; the Active tab shows a red count badge when count > 0.",
+      "api_reference": "GET /api/inventory/alerts?page=1&per_page=20&acknowledged=false&resolved=false"
+    },
+    {
+      "id": "INV-082",
+      "section": "Alerts",
+      "title": "Alerts type and severity filters",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Alerts of multiple types/severities.",
+      "steps": [
+        "Set Type filter = Low Stock, then Out of Stock, Near Expiry, Expired.",
+        "Set Severity = Critical, High, Medium, Low.",
+        "Watch the requests."
+      ],
+      "test_data": "Type: low_stock; Severity: critical",
+      "expected_result": "Type sends alert_type=<value>; severity sends severity=<value>; 'All Types'/'All Severities' clear them; list updates accordingly.",
+      "api_reference": "GET /api/inventory/alerts?alert_type=low_stock&severity=critical"
+    },
+    {
+      "id": "INV-083",
+      "section": "Alerts",
+      "title": "Acknowledge a single alert",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "An active (unacknowledged) alert exists; write permission.",
+      "steps": [
+        "On an active AlertCard click 'Acknowledge'.",
+        "Observe the card and list."
+      ],
+      "test_data": "N/A",
+      "expected_result": "POST .../acknowledge returns 200; list re-fetches; the alert now shows an 'Acknowledged' badge and a 'Mark Resolved' button.",
+      "api_reference": "POST /api/inventory/alerts/{id}/acknowledge"
+    },
+    {
+      "id": "INV-084",
+      "section": "Alerts",
+      "title": "Resolve an acknowledged alert",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "An acknowledged (not resolved) alert exists.",
+      "steps": [
+        "On the Acknowledged tab click 'Mark Resolved' on a card.",
+        "Observe the list."
+      ],
+      "test_data": "Resolution note auto-sent: 'Resolved from alerts list'",
+      "expected_result": "POST .../resolve returns 200 with body {resolution_notes:'Resolved from alerts list'}; list refreshes and the alert moves to Resolved.",
+      "api_reference": "POST /api/inventory/alerts/{id}/resolve"
+    },
+    {
+      "id": "INV-085",
+      "section": "Alerts",
+      "title": "Bulk Acknowledge All on Active tab",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Several active alerts on the current page.",
+      "steps": [
+        "On the Active tab click 'Acknowledge All (N)'.",
+        "Confirm the browser prompt.",
+        "Observe results."
+      ],
+      "test_data": "N/A",
+      "expected_result": "After confirming, an acknowledge POST fires for each currently-loaded unacknowledged alert sequentially; list refreshes with those alerts acknowledged. The button only appears on the Active tab when count.active > 0.",
+      "api_reference": "POST /api/inventory/alerts/{id}/acknowledge (per alert)"
+    },
+    {
+      "id": "INV-086",
+      "section": "Alerts",
+      "title": "Alerts tab counts derived from current page only",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "More than one page of alerts.",
+      "steps": [
+        "Note the count badges on tabs versus the actual total across pages."
+      ],
+      "test_data": "N/A",
+      "expected_result": "DEFECT-WATCH: getAlertCounts is computed from the loaded alerts array (current page), not a server aggregate; counts may understate totals when paginated. Log as a defect/enhancement.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-087",
+      "section": "Alerts",
+      "title": "Alerts list empty states per tab",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "A tab with no alerts.",
+      "steps": [
+        "Switch to a tab (e.g. Resolved) with no alerts."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Bell icon empty card with a context message (e.g. 'No active alerts - your inventory is in good shape!' / 'No resolved alerts').",
+      "api_reference": "GET /api/inventory/alerts"
+    },
+    {
+      "id": "INV-088",
+      "section": "Alerts",
+      "title": "AlertCard View Medicine / View Batch links",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "An alert tied to a medicine_id and/or batch_id.",
+      "steps": [
+        "Click 'View Medicine' on an alert; then 'View Batch' if present."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Navigates to /inventory/medicines/{medicine_id} and /inventory/batches/{batch_id}. DEFECT-WATCH: there are no App.jsx routes for /inventory/medicines/:id or /inventory/batches/:id, so these likely land on a not-found / blank route - log as a broken-link defect.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-089",
+      "section": "Alerts",
+      "title": "Alerts Dashboard summary stats and breakdown",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Active alerts exist; logged in as admin.",
+      "steps": [
+        "Navigate to /inventory/alerts/dashboard.",
+        "Verify the 4 summary cards (Total Active, Critical, Out of Stock, Near Expiry), the 'Alerts by Type' and 'Alerts by Severity' breakdowns, and the Critical Alerts list."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Stats are computed from two GET /alerts calls (critical+unresolved, and all unresolved); breakdown counts match; Critical Alerts shows up to 3 AlertCards with acknowledge/resolve actions.",
+      "api_reference": "GET /api/inventory/alerts?severity=critical&resolved=false&page=1&per_page=5, GET /api/inventory/alerts?resolved=false"
+    },
+    {
+      "id": "INV-090",
+      "section": "Alerts",
+      "title": "Alerts Dashboard stat-card and quick-action navigation",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Click each summary card (Total Active/Critical/Out of Stock/Near Expiry).",
+        "Click the quick actions (Check Stock Levels, Create Purchase Order, Expiring Batches) and 'View All Alerts'."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Summary cards route to /inventory/alerts with query params (?status=active, ?severity=critical, ?type=out_of_stock, ?type=near_expiry). NOTE: AlertsList does not read these query params (it manages its own filter state), so the filter may not pre-apply - log as a minor defect. Quick actions route to /inventory/stock, /inventory/purchase-orders/new and /inventory/batches?expiring=soon (the last has no matching route).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "INV-091",
+      "section": "Alerts",
+      "title": "Acknowledge failure handled gracefully",
+      "priority": "Low",
+      "type": "Negative",
+      "preconditions": "Ability to force a 404/500 on acknowledge (e.g. stale alert id).",
+      "steps": [
+        "Force an acknowledge call to fail.",
+        "Observe behaviour."
+      ],
+      "test_data": "Invalid alert id",
+      "expected_result": "Backend returns 404 if not found; UI shows alert 'Failed to acknowledge alert' and the list is unchanged.",
+      "api_reference": "POST /api/inventory/alerts/{bad-id}/acknowledge -> 404"
+    },
+    {
+      "id": "INV-092",
+      "section": "Provider Stock",
+      "title": "Provider Stock page lists provider locations with summary",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "At least one provider stock location set up; logged in as admin.",
+      "steps": [
+        "Navigate to /inventory/provider-stock.",
+        "Verify each ProviderCard shows provider name, total items and total value (Rs. en-IN), plus Assign (+) and Return (-) actions and an expand chevron."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Providers load from GET /provider-stock/locations; cards render with summary; Refresh and 'Setup New Provider' buttons present in the header.",
+      "api_reference": "GET /api/inventory/provider-stock/locations"
+    },
+    {
+      "id": "INV-093",
+      "section": "Provider Stock",
+      "title": "Provider Stock empty state",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "No provider stock locations.",
+      "steps": [
+        "Open /inventory/provider-stock with no providers configured."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Empty card with Users icon, 'No Provider Stock Locations', and a 'Setup First Provider' button.",
+      "api_reference": "GET /api/inventory/provider-stock/locations"
+    },
+    {
+      "id": "INV-094",
+      "section": "Provider Stock",
+      "title": "Expand provider to view assigned stock",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "A provider with assigned stock.",
+      "steps": [
+        "Click a ProviderCard to expand it.",
+        "Verify the stock table (Medicine, Qty, Value, Batch, Expiry) or a 'No stock assigned yet' empty state."
+      ],
+      "test_data": "N/A",
+      "expected_result": "On first expand, GET /provider-stock/{provider_id} loads the items; table shows them; subsequent collapse/expand does not re-fetch.",
+      "api_reference": "GET /api/inventory/provider-stock/{provider_id}"
+    },
+    {
+      "id": "INV-095",
+      "section": "Provider Stock",
+      "title": "Setup New Provider",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "A valid provider UUID with no stock location yet; write permission.",
+      "steps": [
+        "Click 'Setup New Provider'.",
+        "Enter the provider ID.",
+        "Click Setup."
+      ],
+      "test_data": "Provider ID: a valid provider UUID",
+      "expected_result": "POST /provider-stock/{id}/setup returns 200 with the new location; modal closes; the provider list refreshes and includes the new provider.",
+      "api_reference": "POST /api/inventory/provider-stock/{provider_id}/setup"
+    },
+    {
+      "id": "INV-096",
+      "section": "Provider Stock",
+      "title": "Setup New Provider - invalid id error",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Setup modal open.",
+      "steps": [
+        "Enter an invalid/non-existent provider id.",
+        "Click Setup."
+      ],
+      "test_data": "Provider ID: not-a-real-id",
+      "expected_result": "Backend returns 400 with {error:...}; UI shows alert with the server error message; modal stays open; no provider added.",
+      "api_reference": "POST /api/inventory/provider-stock/{bad-id}/setup -> 400"
+    },
+    {
+      "id": "INV-097",
+      "section": "Provider Stock",
+      "title": "Assign stock to provider",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "A provider exists; source location has stock; medicines searchable.",
+      "steps": [
+        "On a ProviderCard click the + (Assign Stock) action.",
+        "Search and pick a medicine, choose a Source Location, enter a quantity.",
+        "Click 'Assign Stock'."
+      ],
+      "test_data": "Medicine Paracetamol, Source 'Central Store', Qty 20",
+      "expected_result": "On success the modal closes and the provider card/stock refreshes. DEFECT-WATCH: the modal posts {medicine_id, quantity, source_location_id} but the backend assign route reads from_location_id (data['from_location_id']) -> a KeyError yields 400 with the missing-key error. Verify whether assignment actually persists; a 400 indicates a field-name mismatch defect.",
+      "api_reference": "POST /api/inventory/provider-stock/{provider_id}/assign"
+    },
+    {
+      "id": "INV-098",
+      "section": "Provider Stock",
+      "title": "Assign stock - location list excludes provider bags; medicine search min length",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Assign modal open.",
+      "steps": [
+        "Open the Source Location dropdown and confirm provider_bag-type locations are excluded.",
+        "Type 1 char in medicine search (no results), then >=2 chars (results appear after ~300ms debounce)."
+      ],
+      "test_data": "Search: 'Pa' (>=2 chars)",
+      "expected_result": "Locations filtered to exclude location_type 'provider_bag'; medicine search only runs at length >= 2 with a 300ms debounce; Assign button disabled until medicine, quantity and source location are all set.",
+      "api_reference": "GET /api/inventory/locations, GET /api/inventory/medicines/search?q=Pa&limit=10"
+    },
+    {
+      "id": "INV-099",
+      "section": "Provider Stock",
+      "title": "Return stock from provider with max-quantity guard",
+      "priority": "High",
+      "type": "Validation",
+      "preconditions": "A provider with assigned stock.",
+      "steps": [
+        "On a ProviderCard click the - (Return Stock) action.",
+        "Select a medicine from the provider's stock, choose a Destination Location.",
+        "Enter a quantity greater than available; then a valid quantity; click 'Return Stock'."
+      ],
+      "test_data": "Provider stock qty 10; try 50 then 8",
+      "expected_result": "Entering more than available shows 'Cannot exceed available quantity (10)' and disables the Return button. A valid return submits. DEFECT-WATCH: the modal posts {medicine_id, quantity, destination_location_id} but the backend return route reads to_location_id -> a 400 KeyError indicates a field-name mismatch defect; verify return actually persists.",
+      "api_reference": "POST /api/inventory/provider-stock/{provider_id}/return, GET /api/inventory/provider-stock/{provider_id}"
+    },
+    {
+      "id": "INV-100",
+      "section": "Provider Stock",
+      "title": "Provider stock transfer reflected in both source and provider (data integrity)",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "Assign succeeds (or use the working path); note source-location stock before.",
+      "steps": [
+        "Record the source location's current_stock for a medicine (via /inventory/stock).",
+        "Assign N units to a provider.",
+        "Re-check the source location stock and the provider's stock."
+      ],
+      "test_data": "Assign 20 units of Paracetamol",
+      "expected_result": "Source location current_stock decreases by 20; provider stock increases by 20; a return reverses it. Totals must reconcile (no stock created or lost).",
+      "api_reference": "GET /api/inventory/stock, POST /api/inventory/provider-stock/{id}/assign, GET /api/inventory/provider-stock/{id}"
+    },
+    {
+      "id": "INV-101",
+      "section": "Data Integrity",
+      "title": "Receiving a PO increases stock on hand",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "An approved PO; note the delivery location's stock for the PO medicines.",
+      "steps": [
+        "Record current_stock for a PO line medicine at the delivery location.",
+        "Receive the PO fully with valid batch details.",
+        "Re-check the stock at that location and the new batch."
+      ],
+      "test_data": "Receive 100 units, Batch BATCH-PCM-2401",
+      "expected_result": "After a successful receipt, stock at the location increases by the received quantity, a new batch record exists with the entered batch number/expiry, and the PO status reflects received/partial_received.",
+      "api_reference": "POST /api/inventory/purchase-orders/{id}/receive, GET /api/inventory/stock"
+    },
+    {
+      "id": "INV-102",
+      "section": "Data Integrity",
+      "title": "Dispensing reduces stock on hand and batch quantity",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "A medicine with available batch stock; dispense permission.",
+      "steps": [
+        "Record the medicine's available stock and the selected batch's available_quantity.",
+        "Dispense a known quantity from that batch.",
+        "Re-check stock and batch available_quantity."
+      ],
+      "test_data": "Dispense 5 units from BATCH-PCM-2401",
+      "expected_result": "On a successful dispense, the location stock and the batch available_quantity each drop by the dispensed quantity; a dispensing record is created. (If dispense fails due to the payload mismatch in INV-072, log that defect and verify no partial stock change occurred.)",
+      "api_reference": "POST /api/inventory/dispensing/dispense, GET /api/inventory/stock, GET /api/inventory/batches"
+    },
+    {
+      "id": "INV-103",
+      "section": "Data Integrity",
+      "title": "Returning dispensed medicine restores stock",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "A dispensing record with a returnable item.",
+      "steps": [
+        "Note the batch/location stock for the dispensed medicine.",
+        "Return part of the dispensed quantity with a reason.",
+        "Re-check stock and the record's returned quantity."
+      ],
+      "test_data": "Return 2 of 5 dispensed",
+      "expected_result": "Returned quantity is recorded on the item, and stock for that batch/location increases by the returned amount (return-to-stock), preserving totals.",
+      "api_reference": "POST /api/inventory/dispensing/{id}/return, GET /api/inventory/stock"
+    },
+    {
+      "id": "INV-104",
+      "section": "Data Integrity",
+      "title": "Generate alerts surfaces low-stock and expiry conditions",
+      "priority": "Medium",
+      "type": "Data Integrity",
+      "preconditions": "Stock at/below reorder level and batches near/at expiry; admin (manage).",
+      "steps": [
+        "As admin call POST /inventory/alerts/generate (e.g. via DevTools or any wired control).",
+        "Open /inventory/alerts and the Alerts Dashboard."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Alert generation returns 200 with results; low_stock/out_of_stock alerts appear for items at/below thresholds and near_expiry/expired alerts for the relevant batches; dashboard breakdown counts update.",
+      "api_reference": "POST /api/inventory/alerts/generate, GET /api/inventory/alerts"
+    },
+    {
+      "id": "INV-105",
+      "section": "API",
+      "title": "check-availability requires medicine_id, location_id and positive quantity",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "Valid token; DevTools or API tool.",
+      "steps": [
+        "Call GET /inventory/dispensing/check-availability with no params.",
+        "Call again with medicine_id+location_id but quantity=0 or negative.",
+        "Call with all valid params and a positive quantity."
+      ],
+      "test_data": "quantity = 0 then 10",
+      "expected_result": "Missing medicine_id/location_id -> 400 'medicine_id and location_id are required'; quantity <= 0 or missing -> 400 'Valid quantity is required'; valid request returns the availability result JSON.",
+      "api_reference": "GET /api/inventory/dispensing/check-availability"
+    },
+    {
+      "id": "INV-106",
+      "section": "API",
+      "title": "Manual stock update requires manage permission and valid body",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "admin (manage) and a data_entry user.",
+      "steps": [
+        "As data_entry POST /inventory/stock/update with a valid body.",
+        "As admin POST with a missing medicine_id/location_id.",
+        "As admin POST a valid body."
+      ],
+      "test_data": "{medicine_id, location_id, quantity:50}",
+      "expected_result": "data_entry -> 403 'Required: manage'; missing fields -> 422 validation; valid -> 200 'Stock updated successfully' with the stock object. Negative quantity -> 422 (Range min 0).",
+      "api_reference": "POST /api/inventory/stock/update"
+    },
+    {
+      "id": "INV-107",
+      "section": "API",
+      "title": "Stock transfer between locations",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "Two locations with stock; write permission.",
+      "steps": [
+        "POST /inventory/stock/transfer with valid from/to/medicine/quantity.",
+        "POST with a quantity exceeding source stock."
+      ],
+      "test_data": "Transfer 10 valid; then 99999 (over stock)",
+      "expected_result": "Valid transfer -> 201 'Stock transferred successfully' with a movement; source decreases and destination increases. Over-stock transfer -> 400 with the service ValueError message; no change.",
+      "api_reference": "POST /api/inventory/stock/transfer"
+    },
+    {
+      "id": "INV-108",
+      "section": "API",
+      "title": "per_page cap enforced on list endpoints",
+      "priority": "Low",
+      "type": "API",
+      "preconditions": "Valid token.",
+      "steps": [
+        "Call GET /inventory/medicines?per_page=1000.",
+        "Inspect the returned per_page."
+      ],
+      "test_data": "per_page = 1000",
+      "expected_result": "Backend caps per_page at 200 (min(per_page,200)); response per_page <= 200. Same cap applies to suppliers/purchase-orders/dispensing/movements/requisitions.",
+      "api_reference": "GET /api/inventory/medicines?per_page=1000"
+    },
+    {
+      "id": "INV-109",
+      "section": "Permission / Session",
+      "title": "Expired/invalid token triggers refresh then redirect to /login",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Logged in; ability to corrupt the token in localStorage.",
+      "steps": [
+        "Open /inventory/medicines.",
+        "In DevTools set localStorage access_token to an invalid value and remove refresh_token.",
+        "Trigger a request (e.g. Refresh or change page)."
+      ],
+      "test_data": "Invalid access_token, no refresh_token",
+      "expected_result": "The first 401 attempts a token refresh; with no/invalid refresh_token the refresh fails, tokens+user are cleared from localStorage and the app redirects to /login.",
+      "api_reference": "Any inventory GET -> 401; POST /api/auth/refresh"
+    },
+    {
+      "id": "INV-110",
+      "section": "Permission / Session",
+      "title": "Direct access to inventory routes without login redirects to login",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Not logged in (no token).",
+      "steps": [
+        "In a fresh/incognito session navigate directly to /inventory, /inventory/dispense/new, /inventory/purchase-orders/new and /inventory/provider-stock."
+      ],
+      "test_data": "N/A",
+      "expected_result": "All inventory routes are protected; an unauthenticated user is redirected to /login (no inventory data is rendered).",
+      "api_reference": "N/A (route guard) / 401 on data calls"
+    },
+    {
+      "id": "INV-111",
+      "section": "Permission / Session",
+      "title": "Token with deleted/unknown user returns 401 User not found",
+      "priority": "Low",
+      "type": "Negative",
+      "preconditions": "A technically valid JWT whose user id no longer exists (coordinate with backend).",
+      "steps": [
+        "Use the orphaned token to call any inventory endpoint (e.g. GET /inventory/medicines)."
+      ],
+      "test_data": "JWT for a non-existent user id",
+      "expected_result": "Backend role_required returns 401 {'message':'User not found'}; the client treats it as a 401 and follows the refresh/redirect path.",
+      "api_reference": "GET /api/inventory/medicines -> 401"
+    },
+    {
+      "id": "INV-112",
+      "section": "Medicines Master",
+      "title": "Schedule X / narcotic medicine create and display",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Create a medicine with Drug Schedule X (e.g. Morphine 10mg Injection).",
+        "Verify it saves and lists correctly."
+      ],
+      "test_data": "Morphine 10mg Injection, Schedule X",
+      "expected_result": "drug_class 'X' is accepted (OneOf G/H/H1/X); the medicine is created and shown; form badge shows Injection.",
+      "api_reference": "POST /api/inventory/medicines"
+    },
+    {
+      "id": "INV-113",
+      "section": "Dispensing",
+      "title": "Very large dispense quantity handling",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "A medicine with limited stock.",
+      "steps": [
+        "In the Direct Dispense tab set an item quantity to a very large number (e.g. 1000000).",
+        "Proceed to batch selection."
+      ],
+      "test_data": "Quantity 1000000",
+      "expected_result": "Batch selector shows Available < Required with the red insufficient-stock banner; the wizard cannot advance past Step 3 because batches cannot cover the requirement.",
+      "api_reference": "GET /api/inventory/batches"
+    },
+    {
+      "id": "INV-114",
+      "section": "Dispensing",
+      "title": "Expired batch cannot be selected for dispensing",
+      "priority": "High",
+      "type": "Negative",
+      "preconditions": "The selected medicine has at least one expired batch and one valid batch.",
+      "steps": [
+        "On Step 3 locate the expired batch row.",
+        "Attempt to enter a Dispense Qty in the expired batch's input."
+      ],
+      "test_data": "An expired batch (expiry < today)",
+      "expected_result": "The expired batch row is dimmed (opacity-50) and its Dispense Qty input is disabled; expiry badge shows 'Expired'; auto-select skips it in practice because FEFO orders it first but it cannot be edited - verify allocation still favours valid batches.",
+      "api_reference": "GET /api/inventory/batches"
+    },
+    {
+      "id": "INV-115",
+      "section": "Purchase Orders",
+      "title": "Cancel a purchase order with reason (API)",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "A draft/approved PO; approve permission.",
+      "steps": [
+        "As admin POST /inventory/purchase-orders/{id}/cancel with body {reason:'Supplier unavailable'}.",
+        "As data_entry attempt the same cancel."
+      ],
+      "test_data": "reason: 'Supplier unavailable'",
+      "expected_result": "admin -> 200 'Purchase order cancelled' and status becomes Cancelled; data_entry -> 403 'Required: approve'. NOTE: the PO Detail UI has no Cancel button, so this is API-level verification only.",
+      "api_reference": "POST /api/inventory/purchase-orders/{id}/cancel"
+    },
+    {
+      "id": "INV-116",
+      "section": "Purchase Orders",
+      "title": "Receive Goods - received quantity exceeding ordered/pending",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "An approved PO line ordered_quantity 100.",
+      "steps": [
+        "In the Receive Goods dialog set Received Quantity to 500 (more than ordered).",
+        "Enter valid batch details and confirm."
+      ],
+      "test_data": "Received 500 of 100 ordered",
+      "expected_result": "Schema-wise received_quantity > 0 is valid; business rule expectation is that the service rejects over-receipt with a 400 ValueError. Verify the backend response and that stock is not over-credited; log a defect if over-receipt silently succeeds.",
+      "api_reference": "POST /api/inventory/purchase-orders/{id}/receive"
+    },
+    {
+      "id": "INV-117",
+      "section": "Medicines Master",
+      "title": "GST percentage boundary values",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "Logged in as admin.",
+      "steps": [
+        "Create a medicine with GST 0, then 100 (valid bounds), then 101 (invalid)."
+      ],
+      "test_data": "GST 0 / 100 / 101",
+      "expected_result": "GST 0 and 100 accepted (Range 0-100); GST 101 -> 422 validation error; record not saved for the invalid value.",
+      "api_reference": "POST /api/inventory/medicines"
+    },
+    {
+      "id": "INV-118",
+      "section": "Cross-cutting",
+      "title": "Selectors handle empty backing data without crashing",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "Environment with zero suppliers / zero locations (or block the calls).",
+      "steps": [
+        "Open the PO Wizard Step 1 with no suppliers and no locations available.",
+        "Open the Supplier and Location dropdowns."
+      ],
+      "test_data": "N/A",
+      "expected_result": "SupplierSelector shows 'No suppliers found'; LocationSelector shows 'No locations found'; no JS error; the wizard still validates 'required' on Next.",
+      "api_reference": "GET /api/inventory/suppliers, GET /api/inventory/locations"
+    },
+    {
+      "id": "INV-119",
+      "section": "Cross-cutting",
+      "title": "BatchSelector with no batches for medicine",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "A medicine with zero available batches selected for dispensing.",
+      "steps": [
+        "On Step 3 view a medicine that has no batches."
+      ],
+      "test_data": "Medicine with no stock/batches",
+      "expected_result": "BatchSelector shows the Package icon with 'No batches available for this medicine'; Available = 0; insufficient-stock banner shows; wizard cannot proceed.",
+      "api_reference": "GET /api/inventory/batches?medicine_id={id}&available_only=true"
+    },
+    {
+      "id": "INV-120",
+      "section": "API",
+      "title": "Patient prescriptions endpoint requires UUID patient id",
+      "priority": "Low",
+      "type": "API",
+      "preconditions": "Valid token.",
+      "steps": [
+        "Call GET /inventory/prescriptions/patient/not-a-uuid.",
+        "Call GET /inventory/prescriptions/patient/{valid-uuid}."
+      ],
+      "test_data": "patient_id = 'abc' then a valid UUID",
+      "expected_result": "Non-UUID path does not match the <uuid:patient_id> converter and returns 404 (route not matched); a valid UUID returns {prescriptions, total} aggregating OPD + Saranam plan-of-care, or an empty list if none.",
+      "api_reference": "GET /api/inventory/prescriptions/patient/{patient_id}"
+    }
+  ]
+}

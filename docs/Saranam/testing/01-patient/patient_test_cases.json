@@ -1,0 +1,2239 @@
+{
+  "module": "Patient Management",
+  "module_code": "PAT",
+  "version": "1.0",
+  "summary": "Manual GO-LIVE test pack for the Saranam India Health Care Patient Management module. Covers the patient list, quick-add registration, patient detail dashboard (Overview, Visits, Trends, Past Records tabs), patient edit, all baseline clinical assessment forms (Nursing, Doctor, Psychological, Physiotherapy, ESAS-R, PPS, Plan of Care), the body-map editor, AI/follow-up summaries, care circle, universal PPS, UHID generation/regeneration, mark-deceased, and every backend API endpoint exposed by app/patients/routes.py. Includes happy paths, validations, negative/error paths, empty & loading states, permission/session handling, and cross-module data integrity.",
+  "in_scope": [
+    "Patient list screen: load, search, BSC/Onco/Zone filters, clear filters, grid/table view toggle, pagination, Add New Patient, row click navigation, empty & loading states",
+    "Patient registration (PatientQuickAdd dialog): required + optional fields, +91 phone handling, approximate age, Bangalore zone auto-suggest from PIN, GPS/map location capture + zone detection, linked hospital selection + inline add, diagnosis/referral inline add, ABHA duplicate check, patient category & priority, success/UHID messaging",
+    "Patient detail dashboard: header chips (status, UHID copy, homecare code, zone, priority), scheduling strip (edit frequency/priority/notes, flag/unflag urgent), admin UHID regeneration, tab navigation",
+    "Overview tab: demographics, clinical status chips, body map editor (free-click markers + AI highlights), universal PPS card, care circle card, follow-up summary history, AI patient summary (generate/save/download), baseline assessment accordions, patient category & priority save, UHID preview + Mark Initial Assessment Complete (UHID assignment)",
+    "Baseline assessment forms: Nursing, Doctor, Psychological, Physiotherapy, ESAS-R, PPS, Plan of Care (save, reload, AI summaries, validations, score bounds)",
+    "Visits tab: list visits, create visit (follow-up/emergency/initial/teleconsult), vitals capture, teleconsult provider+time+record-call, visit detail follow-up sheet, save & mark complete, patient outcome / mark deceased from visit",
+    "Trends tab: vitals/ESAS-R/PPS charts, source legend, vital tab selector, symptom toggles, baseline comparison, empty state",
+    "Past Records tab: full-history timeline, type filter chips, expand/collapse events, empty state",
+    "Patient edit screen: all demographic/clinical/location/status fields, phone +91 normalisation, Bangalore resident toggle, linked hospital + inline add, mark deceased / edit death record, save + redirect",
+    "Mark Deceased dialog (shared): date/place/remarks validation, edit mode, care-status auto-demotion, scheduling-pool removal",
+    "Backend API: GET/POST/PUT patients, search, duplicate-check, recent, timeline, submissions, full-history, zones detect/boundaries, UHID preview/regenerate, patient PPS, config (diagnosis-options, referral-partners, hospital-options)",
+    "Auth/session: token attach, 401 refresh-and-retry, refresh failure redirect to /login, route guards for /patients, /patients/:id, /patients/:id/edit"
+  ],
+  "out_of_scope": [
+    "Saranam scheduling pool / day-map screens beyond the patient-detail scheduling strip",
+    "Teleconsult session UI/video room (only the teleconsult scheduling trigger from the Visits tab is in scope)",
+    "OPD / IPD / Encounters / Inventory dispensing modules (only their read-only appearance in the Past Records timeline is in scope)",
+    "Authentication/login screen internals (login flow itself is a separate module; only redirect behaviour is covered)",
+    "Generated PDF byte-level content correctness (only that the download is triggered and opens)",
+    "AI model quality/accuracy of generated summaries and PPS suggestions (only that generate/save/persist mechanics work)",
+    "Form Builder / dynamic form submissions creation (only the submission count + timeline display is in scope)"
+  ],
+  "screens": [
+    { "name": "Patients List", "route": "/patients" },
+    { "name": "Patient Detail Dashboard (Overview / Visits / Trends / Past Records)", "route": "/patients/:id" },
+    { "name": "Patient Edit", "route": "/patients/:id/edit" },
+    { "name": "Register New Patient dialog (PatientQuickAdd)", "route": "/patients (modal)" },
+    { "name": "Visit Detail / Follow-Up Sheet", "route": "/patients/:id (Visits tab > visit)" },
+    { "name": "Mark Deceased dialog (shared)", "route": "/patients/:id and /patients/:id/edit (modal)" }
+  ],
+  "roles_and_access": "All three routes (/patients, /patients/:id, /patients/:id/edit) require an authenticated session (valid JWT in localStorage access_token) but no special permission — any logged-in user may view, create and edit patients and assessments. The only role-gated action is UHID regeneration: the Refresh icon next to the UHID chip and the backend POST /api/patients/:id/regenerate-uhid are admin-only (require_role('admin')). A non-admin must not see the regenerate icon and the endpoint must return 403 for non-admins. Unauthenticated/expired-token access: the axios client attaches the Bearer token; on a 401 it attempts a one-time refresh via the refresh_token, and if that fails it clears localStorage and hard-redirects to /login.",
+  "api_endpoints": [
+    { "method": "GET", "path": "/api/patients", "purpose": "List/search patients. Query: q, page, per_page (max 100), sort_by, sort_order, bsc_status, is_onco, geographic_cluster. Returns {patients,total,page,per_page,total_pages}." },
+    { "method": "POST", "path": "/api/patients", "purpose": "Create patient. Validates PatientCreateSchema; ABHA-address duplicate check (409); returns 201 {patient}. 400 on validation error." },
+    { "method": "GET", "path": "/api/patients/:id", "purpose": "Get patient by UUID; records recent-access; 404 if not found." },
+    { "method": "PUT", "path": "/api/patients/:id", "purpose": "Update patient (all-optional PatientUpdateSchema). 200 patient, 404 if not found, 400 on validation error." },
+    { "method": "POST", "path": "/api/patients/:id/regenerate-uhid", "purpose": "Admin-only. Mint new UHID from current year/zone counter; old UHID kept in history. 400 if not Bangalore resident / no zone; 409 on collision; 403 non-admin." },
+    { "method": "GET", "path": "/api/patients/uhid/preview", "purpose": "Read-only peek at next UHID for (zone, hospital). 400 on missing/invalid zone or hospital." },
+    { "method": "POST", "path": "/api/patients/:id/pps", "purpose": "Record standalone patient-level PPS (visit_id=NULL); syncs latest_pps_score + clinical_complexity. 400 if pps_score not 0-100; 404 if patient missing; 201 {pps,priority}." },
+    { "method": "GET", "path": "/api/patients/:id/submissions", "purpose": "Paginated form submissions for a patient. 404 if patient missing." },
+    { "method": "GET", "path": "/api/patients/recent", "purpose": "Recently accessed patients for current user. Query limit (max 50)." },
+    { "method": "POST", "path": "/api/patients/search", "purpose": "Advanced search with filters (gender, age range, city, state, has_abha, has_submissions, bsc_status, is_onco, geographic_cluster, date range, sort)." },
+    { "method": "POST", "path": "/api/patients/duplicate-check", "purpose": "Check for existing patient by abha_address. Returns {duplicate_found, patient?}." },
+    { "method": "GET", "path": "/api/patients/:id/timeline", "purpose": "Patient timeline (creation + form submissions), newest first. 404 if patient missing." },
+    { "method": "GET", "path": "/api/patients/:id/full-history", "purpose": "Comprehensive cross-module history: Saranam visits+assessments, encounters, IPD admissions, dispensings, form submissions, with summary counts. Powers Past Records tab." },
+    { "method": "POST", "path": "/api/patients/zones/detect", "purpose": "Point-in-polygon GBA zone detection from {lat,lng}. 400 if lat/lng missing; returns {zone} or null." },
+    { "method": "GET", "path": "/api/patients/zones/boundaries", "purpose": "GBA zone boundary GeoJSON + colors for map overlay." },
+    { "method": "GET", "path": "/api/patients/config/diagnosis-options", "purpose": "List diagnosis dropdown options (DB-backed with defaults)." },
+    { "method": "POST", "path": "/api/patients/config/diagnosis-options", "purpose": "Add a diagnosis option. 400 if blank; 409 if already exists; 201 with options." },
+    { "method": "PUT", "path": "/api/patients/config/diagnosis-options", "purpose": "Replace full diagnosis list. 400 if empty/non-array." },
+    { "method": "DELETE", "path": "/api/patients/config/diagnosis-options", "purpose": "Remove a diagnosis option. 400 blank, 404 not found." },
+    { "method": "GET", "path": "/api/patients/config/referral-partners", "purpose": "List referral partner options." },
+    { "method": "POST", "path": "/api/patients/config/referral-partners", "purpose": "Add a referral partner. 409 if exists." },
+    { "method": "PUT", "path": "/api/patients/config/referral-partners", "purpose": "Replace full referral partner list." },
+    { "method": "DELETE", "path": "/api/patients/config/referral-partners", "purpose": "Remove a referral partner. 404 not found." },
+    { "method": "GET", "path": "/api/patients/config/hospital-options", "purpose": "Hospital master list (active only by default; include_inactive=1 for all)." },
+    { "method": "POST", "path": "/api/patients/config/hospital-options", "purpose": "Add hospital. Validates code (alnum 2-10), name required, prefix 5-20. 409 if code exists." },
+    { "method": "PUT", "path": "/api/patients/config/hospital-options", "purpose": "Replace catalog. code & homecare_prefix immutable for existing; at most one default; 422 on violation." },
+    { "method": "DELETE", "path": "/api/patients/config/hospital-options", "purpose": "Hard-delete if zero references else soft-delete; force=1 forces soft. 409 if deleting the default." },
+    { "method": "GET", "path": "/api/patients/health", "purpose": "Service health check (unauthenticated)." }
+  ],
+  "test_data_setup": [
+    "At least 25 existing patients spanning >1 page (per_page is 20) with a mix of genders, ages, BSC/N-BSC, Onco/Non-Onco, all five zones (North/South/East/West/Central), some with submissions and some without.",
+    "At least one patient in each zone with is_bangalore_resident=true + a linked hospital so UHID preview/generation can be tested.",
+    "At least one non-Bangalore patient (is_bangalore_resident=false, no zone, no UHID) to verify UHID never assigned.",
+    "At least one patient with an existing ABHA address (e.g. 'ramesh.kumar@abdm') to trigger the duplicate-check path.",
+    "At least one patient already marked Deceased and one with care_status 'inactive' to verify status chips/badges.",
+    "At least one patient with a completed initial visit + recorded ESAS-R, PPS and vitals across multiple follow-up visits so Trends and Past Records render charts/timeline.",
+    "One admin user and one non-admin (e.g. nurse/doctor) user for permission tests on UHID regeneration.",
+    "Valid access_token + refresh_token in localStorage; ability to corrupt/expire the access_token to test 401 handling.",
+    "Hospital master list seeded with at least KMIO (default), KCGH and SWON.",
+    "Diagnosis options and referral partner options seeded (defaults exist if DB empty).",
+    "Realistic India test inputs: names (Ramesh Kumar, Lakshmi Devi, Mohammed Irfan), +91 10-digit phones (9876543210), Bangalore PINs (560004 South, 560064 North, 560001 Central), ABHA 14-digit IDs, DD/MM/YYYY DOBs."
+  ],
+  "test_cases": [
+    {
+      "id": "PAT-001",
+      "section": "Patients List - Page Load",
+      "title": "Patients list loads with default state (page 1, grid view, 20 per page)",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Logged in; >20 patients exist.",
+      "steps": [
+        "Navigate to https://saranam.fieldintel.ai/patients",
+        "Observe the page header, view toggle, search bar, filter chips and results"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Page title 'Patients' with subtitle shows. Grid view is active by default. A 'Found N patients' count matches total. First 20 patient cards render. GET /api/patients?page=1&per_page=20 fires and returns 200.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-002",
+      "section": "Patients List - Loading State",
+      "title": "Loading spinner shows while patients are being fetched",
+      "priority": "Medium",
+      "type": "UI/UX",
+      "preconditions": "Logged in; throttle network (DevTools Slow 3G).",
+      "steps": [
+        "Open /patients with network throttled",
+        "Observe the area while the request is in flight"
+      ],
+      "test_data": "N/A",
+      "expected_result": "A centered spinner with 'Fetching patient records...' is shown until data arrives, then it is replaced by cards. Results count shows 'Updating results...' during refresh.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-003",
+      "section": "Patients List - Search",
+      "title": "Search by patient name returns matching patients",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "A patient named 'Ramesh Kumar' exists.",
+      "steps": [
+        "Type 'Ramesh' in the search box",
+        "Click the Search button (or press Enter)"
+      ],
+      "test_data": "Ramesh",
+      "expected_result": "Page resets to 1 and GET /api/patients?q=Ramesh&page=1&per_page=20 fires. Only patients matching 'Ramesh' are listed and count updates accordingly.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-004",
+      "section": "Patients List - Search",
+      "title": "Search by UHID / phone / ABHA returns the patient",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Patient with known UHID and phone 9876543210 exists.",
+      "steps": [
+        "Search by full UHID",
+        "Clear and search by 9876543210",
+        "Clear and search by ABHA id/address"
+      ],
+      "test_data": "UHID value; 9876543210; ramesh.kumar@abdm",
+      "expected_result": "Each search returns the correct patient (q param passed to backend). The placeholder confirms search supports name, UHID, phone, ABHA ID.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-005",
+      "section": "Patients List - Search",
+      "title": "Search with no matches shows 'No Results Found' empty state",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "Logged in.",
+      "steps": [
+        "Search for a string that matches no patient e.g. 'zzzqqq123'",
+        "Observe the empty-state panel"
+      ],
+      "test_data": "zzzqqq123",
+      "expected_result": "Empty state shows 'No Results Found' heading with guidance text and a 'Clear Search Results' button. Count shows 'Found 0 patients'.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-006",
+      "section": "Patients List - Search",
+      "title": "Clear Search Results restores full list",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "A no-match search was performed (PAT-005).",
+      "steps": [
+        "Click 'Clear Search Results' in the empty state"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Search box clears, list reloads page 1 with all patients (GET /api/patients with empty q).",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-007",
+      "section": "Patients List - View Toggle",
+      "title": "Toggle between Grid and Table views",
+      "priority": "Medium",
+      "type": "UI/UX",
+      "preconditions": "Patients exist.",
+      "steps": [
+        "Click the 'Table' toggle button",
+        "Click the 'Grid' toggle button"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Table view shows columns: Patient Name (with UHID), Gender, Age, Contact, Location, Status, Last Activity, Actions. Grid view shows detailed PatientCards. Toggle is client-side only (no new API call) and highlights the active button.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-008",
+      "section": "Patients List - Filters",
+      "title": "BSC filter chip cycles All -> BSC Only -> N-BSC Only -> All",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Patients with bsc_status true and false exist.",
+      "steps": [
+        "Click the BSC chip once (BSC Only)",
+        "Click again (N-BSC Only)",
+        "Click again (All Patients)"
+      ],
+      "test_data": "N/A",
+      "expected_result": "First click sends bsc_status=true (green chip 'BSC Only'); second sends bsc_status=false (grey 'N-BSC Only'); third removes the param ('All Patients'). List + count update each time and page resets implicitly via effect.",
+      "api_reference": "GET /api/patients?bsc_status=true|false"
+    },
+    {
+      "id": "PAT-009",
+      "section": "Patients List - Filters",
+      "title": "Onco filter chip cycles All Types -> Onco Only -> Non-Onco Only -> All",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Patients with is_onco true and false exist.",
+      "steps": [
+        "Click the Onco chip three times observing each state"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Sends is_onco=true, then is_onco=false, then no param. Chip label and color change (orange/purple/neutral) and results filter accordingly.",
+      "api_reference": "GET /api/patients?is_onco=true|false"
+    },
+    {
+      "id": "PAT-010",
+      "section": "Patients List - Filters",
+      "title": "Zone filter chips filter by geographic_cluster and toggle off",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Patients exist in North and South zones.",
+      "steps": [
+        "Click the 'South' zone chip",
+        "Click 'South' again to clear",
+        "Click 'North'"
+      ],
+      "test_data": "South / North",
+      "expected_result": "Clicking 'South' sends geographic_cluster=South and highlights it blue; only South patients show. Clicking again clears it. Selecting a different zone replaces the filter.",
+      "api_reference": "GET /api/patients?geographic_cluster=South"
+    },
+    {
+      "id": "PAT-011",
+      "section": "Patients List - Filters",
+      "title": "Combine BSC + Onco + Zone filters together",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "A BSC + Onco + South patient exists.",
+      "steps": [
+        "Set BSC Only, Onco Only, and Zone South",
+        "Observe results and the request"
+      ],
+      "test_data": "N/A",
+      "expected_result": "GET /api/patients includes bsc_status=true, is_onco=true and geographic_cluster=South together; only patients matching all three are returned.",
+      "api_reference": "GET /api/patients?bsc_status=true&is_onco=true&geographic_cluster=South"
+    },
+    {
+      "id": "PAT-012",
+      "section": "Patients List - Filters",
+      "title": "'Clear filters' link appears and resets all chips",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "At least one filter is active.",
+      "steps": [
+        "Activate any combination of BSC/Onco/Zone filters",
+        "Click 'Clear filters'"
+      ],
+      "test_data": "N/A",
+      "expected_result": "The 'Clear filters' control only renders when a filter is active. Clicking it resets BSC, Onco and Zone to default and reloads the unfiltered list.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-013",
+      "section": "Patients List - Pagination",
+      "title": "Next/Previous pagination navigates pages and disables at bounds",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": ">20 patients so total_pages > 1.",
+      "steps": [
+        "On page 1, confirm Previous (<) is disabled",
+        "Click Next (>) to go to page 2",
+        "Navigate to the last page and confirm Next is disabled"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Page indicator shows 'current | total'. On page 1 the Previous button is disabled; on the last page Next is disabled. Each navigation fires GET /api/patients with the new page and scrolls to top.",
+      "api_reference": "GET /api/patients?page=2"
+    },
+    {
+      "id": "PAT-014",
+      "section": "Patients List - Pagination",
+      "title": "Pagination control hidden when only one page of results",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "A filter/search narrows results to <=20 (total_pages = 1).",
+      "steps": [
+        "Apply a narrow filter that returns <=20 patients",
+        "Look for the pagination control"
+      ],
+      "test_data": "N/A",
+      "expected_result": "No pagination control is rendered when total_pages <= 1.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-015",
+      "section": "Patients List - Navigation",
+      "title": "Clicking a patient card/row opens the patient detail page",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Patients exist.",
+      "steps": [
+        "Click any patient card in grid view",
+        "Go back, switch to table view and click a row (or the Eye action)"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Navigates to /patients/<uuid>; the detail dashboard loads (GET /api/patients/:id). Both card click and table row/Eye action navigate.",
+      "api_reference": "GET /api/patients/:id"
+    },
+    {
+      "id": "PAT-016",
+      "section": "Patients List - Empty Registry",
+      "title": "Empty registry state shows 'Register First Patient' CTA",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "No patients in the system (test/staging env) and no search query.",
+      "steps": [
+        "Open /patients with an empty registry"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Shows 'Your Patient Registry is Empty' with a 'Register First Patient' button that opens the registration dialog.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-017",
+      "section": "Patients List - Add Patient",
+      "title": "'Add New Patient' opens the registration dialog",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Logged in.",
+      "steps": [
+        "Click 'Add New Patient' in the header"
+      ],
+      "test_data": "N/A",
+      "expected_result": "The 'Register New Patient' dialog opens. On open it fetches diagnosis options and referral partners (GET config endpoints).",
+      "api_reference": "GET /api/patients/config/diagnosis-options; GET /api/patients/config/referral-partners"
+    },
+    {
+      "id": "PAT-018",
+      "section": "Registration - Required Validation",
+      "title": "Submitting empty form shows required-field errors",
+      "priority": "High",
+      "type": "Validation",
+      "preconditions": "Registration dialog open.",
+      "steps": [
+        "Click 'Create Patient' without entering anything"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Inline errors appear: First Name required (min 2 chars), Date of Birth required, Gender required, Diagnosis required. No API call is made until validation passes.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-019",
+      "section": "Registration - First Name Validation",
+      "title": "First name below 2 characters is rejected",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Registration dialog open.",
+      "steps": [
+        "Enter 'R' as First Name and fill other required fields",
+        "Click Create Patient"
+      ],
+      "test_data": "First Name = R",
+      "expected_result": "Error 'First name is required (minimum 2 characters)'. First letter auto-capitalises as you type.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-020",
+      "section": "Registration - DOB Validation",
+      "title": "Future date of birth is rejected",
+      "priority": "High",
+      "type": "Validation",
+      "preconditions": "Registration dialog open; Approx Age toggle OFF.",
+      "steps": [
+        "Enter a DOB after today's date (e.g. 01/01/2027)",
+        "Fill other required fields and click Create"
+      ],
+      "test_data": "DOB = 2027-01-01",
+      "expected_result": "Error 'Date of birth cannot be in the future'; no patient is created.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-021",
+      "section": "Registration - Approximate Age",
+      "title": "Approximate Age toggle replaces DOB and derives Jan-1 birth year",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Registration dialog open.",
+      "steps": [
+        "Turn on the 'Approx Age' switch",
+        "Enter 60 as approximate age",
+        "Fill remaining required fields and create"
+      ],
+      "test_data": "Approximate Age = 60",
+      "expected_result": "DOB field is replaced by 'Approximate Age (years)'. On submit date_of_birth is set to (currentYear-60)-01-01 and is_approximate_dob=true is sent. Overview later shows DOB with '(approx)' suffix.",
+      "api_reference": "POST /api/patients"
+    },
+    {
+      "id": "PAT-022",
+      "section": "Registration - Approximate Age Validation",
+      "title": "Approximate Age required when toggle is on",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Registration dialog open; Approx Age ON.",
+      "steps": [
+        "Leave approximate age blank, fill other fields, click Create"
+      ],
+      "test_data": "Approximate Age = (blank)",
+      "expected_result": "Error 'Please enter approximate age'; no creation.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-023",
+      "section": "Registration - Phone Validation",
+      "title": "Phone accepts only digits and exactly 10 digits with +91 prefix",
+      "priority": "High",
+      "type": "Validation",
+      "preconditions": "Registration dialog open.",
+      "steps": [
+        "Type letters and symbols into Phone Number (e.g. 'abc98-76')",
+        "Type 9 digits then try to submit",
+        "Enter a valid 10-digit number"
+      ],
+      "test_data": "abc98-76 ; 987654321 ; 9876543210",
+      "expected_result": "Non-digits are stripped and input is capped at 10 chars. A 9-digit value triggers 'Phone number must be exactly 10 digits'. A valid 10-digit value is stored as +919876543210 on submit (field shows +91 adornment).",
+      "api_reference": "POST /api/patients"
+    },
+    {
+      "id": "PAT-024",
+      "section": "Registration - Alternative Phone Validation",
+      "title": "Alternative phone must differ from primary and be 10 digits",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Registration dialog open; primary phone 9876543210 entered.",
+      "steps": [
+        "Enter the same number 9876543210 in Alternative Phone",
+        "Then change it to a different 10-digit number"
+      ],
+      "test_data": "Alt phone = 9876543210 then 9123456780",
+      "expected_result": "Live error 'Alternative phone must be different from primary phone' while equal; error clears once a different valid 10-digit number is entered. Stored as +91 on submit.",
+      "api_reference": "POST /api/patients"
+    },
+    {
+      "id": "PAT-025",
+      "section": "Registration - Email Validation",
+      "title": "Invalid email format is rejected",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Registration dialog open.",
+      "steps": [
+        "Enter 'patient@@email' in Email",
+        "Fill required fields and click Create"
+      ],
+      "test_data": "patient@@email",
+      "expected_result": "Error 'Invalid email format'; no creation until a valid email or blank is provided.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-026",
+      "section": "Registration - ABHA Validation",
+      "title": "ABHA ID must be exactly 14 digits",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Registration dialog open; ABHA accordion expanded.",
+      "steps": [
+        "Enter '12345' in ABHA ID",
+        "Then enter a valid 14-digit value with spaces/dashes"
+      ],
+      "test_data": "12345 ; 1234-5678-9012-34",
+      "expected_result": "Short value gives 'ABHA ID must be 14 digits'. A 14-digit value (after stripping spaces/dashes) is accepted and stored without separators.",
+      "api_reference": "POST /api/patients"
+    },
+    {
+      "id": "PAT-027",
+      "section": "Registration - ABHA Duplicate Check",
+      "title": "ABHA address blur triggers duplicate check and warns on match",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "An existing patient has abha_address 'ramesh.kumar@abdm'.",
+      "steps": [
+        "Enter 'ramesh.kumar@abdm' in ABHA Address",
+        "Click/tab away from the field (blur)"
+      ],
+      "test_data": "ramesh.kumar@abdm",
+      "expected_result": "POST /api/patients/duplicate-check fires; a warning alert shows '...already exists: <Full Name>' at top of the dialog.",
+      "api_reference": "POST /api/patients/duplicate-check"
+    },
+    {
+      "id": "PAT-028",
+      "section": "Registration - Duplicate Confirm",
+      "title": "Creating despite a duplicate prompts a confirm dialog",
+      "priority": "High",
+      "type": "Negative",
+      "preconditions": "Duplicate warning showing (PAT-027); all required fields valid.",
+      "steps": [
+        "Click 'Create Patient' while the duplicate warning is visible",
+        "In the browser confirm, click Cancel, then retry and click OK"
+      ],
+      "test_data": "N/A",
+      "expected_result": "A window.confirm 'A duplicate patient was found. Do you still want to create?' appears. Cancel aborts (no API). OK proceeds to POST /api/patients which may itself return 409 'Duplicate patient found'.",
+      "api_reference": "POST /api/patients"
+    },
+    {
+      "id": "PAT-029",
+      "section": "Registration - Diagnosis",
+      "title": "Diagnosis is required and 'Other' reveals a free-text field",
+      "priority": "High",
+      "type": "Validation",
+      "preconditions": "Registration dialog open.",
+      "steps": [
+        "Leave Diagnosis unselected, fill other fields, click Create",
+        "Select 'Other' from Diagnosis",
+        "Leave the Specify Diagnosis blank and click Create",
+        "Enter custom text and create"
+      ],
+      "test_data": "Other -> 'Carcinoma tongue'",
+      "expected_result": "Blank diagnosis gives 'Diagnosis is required'. Selecting Other shows 'Specify Diagnosis'; blank gives 'Please specify the diagnosis'. The typed text is sent as diagnosis (diagnosis_other merged).",
+      "api_reference": "POST /api/patients"
+    },
+    {
+      "id": "PAT-030",
+      "section": "Registration - Inline Add Diagnosis",
+      "title": "Add a new diagnosis option inline via the + button",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Registration dialog open.",
+      "steps": [
+        "Click the + next to Diagnosis",
+        "Type 'Esophageal cancer' and click Add"
+      ],
+      "test_data": "Esophageal cancer",
+      "expected_result": "POST /api/patients/config/diagnosis-options adds the option (inserted before 'Other'); dropdown refreshes and the new value is auto-selected. Adding a duplicate option returns 409 and an alert.",
+      "api_reference": "POST /api/patients/config/diagnosis-options"
+    },
+    {
+      "id": "PAT-031",
+      "section": "Registration - Inline Add Referral",
+      "title": "Add a new referral partner inline and pick 'Other' free text",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Registration dialog open.",
+      "steps": [
+        "Click + next to Referred From, type 'St. Johns Hospital', Add",
+        "Separately select 'Other' and type a custom source"
+      ],
+      "test_data": "St. Johns Hospital",
+      "expected_result": "POST /api/patients/config/referral-partners adds and auto-selects the partner. Selecting 'Other' reveals 'Specify Referral Source' which is merged into referred_from on submit.",
+      "api_reference": "POST /api/patients/config/referral-partners"
+    },
+    {
+      "id": "PAT-032",
+      "section": "Registration - Bangalore Auto-detect",
+      "title": "Typing city 'Bangalore' auto-enables Bangalore resident and defaults hospital",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Registration dialog open; Address accordion expanded.",
+      "steps": [
+        "Enter 'Bengaluru' in City",
+        "Observe Bangalore toggle and Linked Hospital"
+      ],
+      "test_data": "City = Bengaluru",
+      "expected_result": "'Patient is from Bangalore' switch turns on, Linked Hospital defaults to the default hospital (KMIO), and the zone is auto-suggested if a known PIN is already present.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-033",
+      "section": "Registration - Zone from PIN",
+      "title": "Bangalore PIN code auto-suggests the zone",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Bangalore resident toggle is ON.",
+      "steps": [
+        "Enter postal code 560004",
+        "Then change it to 560064",
+        "Use the 'Auto Detect' button with an unknown PIN"
+      ],
+      "test_data": "560004 (South); 560064 (North); 560999 (unknown)",
+      "expected_result": "560004 sets zone to South, 560064 sets North. With an unknown PIN, Auto Detect shows alert 'Could not detect zone from postal code. Please select manually.'",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-034",
+      "section": "Registration - Bangalore Required Fields",
+      "title": "Bangalore resident requires both zone and linked hospital",
+      "priority": "High",
+      "type": "Validation",
+      "preconditions": "Bangalore toggle ON; required personal fields filled.",
+      "steps": [
+        "Clear the Bangalore Zone selection and clear Linked Hospital",
+        "Click Create Patient"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Errors 'Please select a Bangalore zone' and 'Please select the linked hospital'; no creation until both are set.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-035",
+      "section": "Registration - Inline Add Hospital",
+      "title": "Add a new hospital inline (code auto-derives KAGBA prefix)",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Bangalore toggle ON; Linked Hospital + button.",
+      "steps": [
+        "Click + next to Linked Hospital",
+        "Type code 'MSR' (observe prefix auto-fills 'KAGBAMSR') and Name 'M.S. Ramaiah'",
+        "Click Add"
+      ],
+      "test_data": "Code=MSR, Name=M.S. Ramaiah",
+      "expected_result": "Code is upper-cased and stripped to alnum; homecare_prefix auto-derives as KAGBA+code unless manually edited. POST /api/patients/config/hospital-options adds and the new hospital is auto-selected in Linked Hospital.",
+      "api_reference": "POST /api/patients/config/hospital-options"
+    },
+    {
+      "id": "PAT-036",
+      "section": "Registration - Add Hospital Validation",
+      "title": "Add hospital requires code and name",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Add hospital panel open.",
+      "steps": [
+        "Leave Code or Name blank and click Add"
+      ],
+      "test_data": "Code=(blank)",
+      "expected_result": "The Add button is disabled until both code and name are present; attempting with missing values alerts 'Code and Name are required'. Backend rejects non-alnum or wrong-length codes with 400.",
+      "api_reference": "POST /api/patients/config/hospital-options"
+    },
+    {
+      "id": "PAT-037",
+      "section": "Registration - GPS Location",
+      "title": "'Use Current Location' captures lat/long and detects zone",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Registration dialog open; Location accordion expanded; browser geolocation allowed.",
+      "steps": [
+        "Click 'Use Current Location' and approve the permission prompt"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Latitude/Longitude fields fill (6 dp), a green 'Captured' chip + coordinates show, and POST /api/patients/zones/detect is called; if a zone is returned it auto-fills the zone and marks Bangalore resident.",
+      "api_reference": "POST /api/patients/zones/detect"
+    },
+    {
+      "id": "PAT-038",
+      "section": "Registration - GPS Denied",
+      "title": "Denying/failing geolocation shows an alert",
+      "priority": "Low",
+      "type": "Negative",
+      "preconditions": "Registration dialog open; deny browser geolocation.",
+      "steps": [
+        "Click 'Use Current Location' and deny the permission prompt"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Alert 'Failed to get location: <message>' shows; lat/long remain blank; no crash.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-039",
+      "section": "Registration - Map Picker",
+      "title": "'Pick on Map' captures location and reverse-geocodes the address",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Registration dialog open; Location accordion expanded.",
+      "steps": [
+        "Click 'Pick on Map'",
+        "Drag the map so the pin sits on a Bangalore address",
+        "Observe lat/long and Address fields"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Map renders; moving the pin updates lat/long and triggers zone detection; resolved address auto-fills Address Line/City/State/PIN and, if Bangalore, enables resident + suggests zone.",
+      "api_reference": "POST /api/patients/zones/detect"
+    },
+    {
+      "id": "PAT-040",
+      "section": "Registration - Patient Category",
+      "title": "Patient Category derives BSC + Onco flags on submit",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Registration dialog open.",
+      "steps": [
+        "Open Patient Category & Priority accordion",
+        "Select 'BSC Onco' and create the patient",
+        "Repeat for 'Non-BSC Non-Onco' and 'Not Yet Determined'"
+      ],
+      "test_data": "BSC Onco / Non-BSC Non-Onco / Not Yet Determined",
+      "expected_result": "BSC Onco -> bsc_status=true,is_onco=true; Non-BSC Non-Onco -> both false; Not Yet Determined -> both null. clinical_complexity defaults to 'not_yet_determined' if left untouched.",
+      "api_reference": "POST /api/patients"
+    },
+    {
+      "id": "PAT-041",
+      "section": "Registration - Happy Path",
+      "title": "Create a full valid non-Bangalore patient successfully",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Registration dialog open.",
+      "steps": [
+        "First=Lakshmi, Last=Devi, DOB=15/03/1968, Gender=Female",
+        "Phone=9876543210, Diagnosis=Breast cancer, City=Mysore (non-Bangalore)",
+        "Click Create Patient"
+      ],
+      "test_data": "Lakshmi Devi, 1968-03-15, Female, +919876543210, Breast cancer, Mysore",
+      "expected_result": "POST /api/patients returns 201. Success alert appears: 'Patient registered successfully. UHID will be assigned when the Initial Assessment is marked complete...'. Dialog auto-closes after ~2.5s and the list refreshes showing the new patient. full_name is 'Lakshmi Devi'.",
+      "api_reference": "POST /api/patients"
+    },
+    {
+      "id": "PAT-042",
+      "section": "Registration - Server Error",
+      "title": "Backend 500/validation error surfaces in the dialog",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Force a backend error (e.g. invalid payload via known constraint).",
+      "steps": [
+        "Submit data that the backend rejects",
+        "Observe the dialog"
+      ],
+      "test_data": "N/A",
+      "expected_result": "A red error alert with the server message shows at the top of the dialog; the dialog stays open; no patient is created.",
+      "api_reference": "POST /api/patients"
+    },
+    {
+      "id": "PAT-043",
+      "section": "Registration - Cancel/Reset",
+      "title": "Cancel closes the dialog and resets the form",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Registration dialog open with partially filled data.",
+      "steps": [
+        "Enter some data then click Cancel",
+        "Re-open the dialog"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Dialog closes immediately; on re-open all fields are reset to defaults (no stale data), errors and warnings cleared.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-044",
+      "section": "Patient Detail - Load",
+      "title": "Patient detail dashboard loads with header and four tabs",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "A patient exists.",
+      "steps": [
+        "Open /patients/<id>",
+        "Observe the header card and tab bar"
+      ],
+      "test_data": "N/A",
+      "expected_result": "GET /api/patients/:id loads the record. Header shows name, homecare code chip, UHID chip, status chip(s), BSC chip, zone, priority. Tabs Overview/Visits/Trends/Past Records render; Overview is active by default.",
+      "api_reference": "GET /api/patients/:id"
+    },
+    {
+      "id": "PAT-045",
+      "section": "Patient Detail - Not Found",
+      "title": "Direct URL to a non-existent patient shows 'Patient not found'",
+      "priority": "High",
+      "type": "Negative",
+      "preconditions": "Logged in.",
+      "steps": [
+        "Navigate to /patients/00000000-0000-0000-0000-000000000000"
+      ],
+      "test_data": "Random valid-format UUID with no record",
+      "expected_result": "GET /api/patients/:id returns 404; the page shows a 'Patient not found' warning rather than crashing.",
+      "api_reference": "GET /api/patients/:id"
+    },
+    {
+      "id": "PAT-046",
+      "section": "Patient Detail - Invalid ID",
+      "title": "Malformed patient id in URL is handled gracefully",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "Logged in.",
+      "steps": [
+        "Navigate to /patients/not-a-uuid"
+      ],
+      "test_data": "not-a-uuid",
+      "expected_result": "The route only matches UUIDs server-side; the API returns 404/422 and the UI shows not-found / error state without a blank screen.",
+      "api_reference": "GET /api/patients/:id"
+    },
+    {
+      "id": "PAT-047",
+      "section": "Patient Detail - Recent Access Tracking",
+      "title": "Opening a patient records it as recently accessed",
+      "priority": "Low",
+      "type": "Data Integrity",
+      "preconditions": "Logged in.",
+      "steps": [
+        "Open a patient detail page",
+        "Open a screen that shows recent patients (PatientSelector) or call GET /api/patients/recent"
+      ],
+      "test_data": "N/A",
+      "expected_result": "The just-viewed patient appears at the top of the recent-patients list (track_patient_access runs on GET /api/patients/:id).",
+      "api_reference": "GET /api/patients/recent"
+    },
+    {
+      "id": "PAT-048",
+      "section": "Patient Detail - UHID Copy",
+      "title": "Clicking the UHID chip copies the UHID to clipboard",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Patient with a UHID open.",
+      "steps": [
+        "Click the UHID chip"
+      ],
+      "test_data": "N/A",
+      "expected_result": "The UHID is copied to clipboard and the tooltip briefly shows 'Copied!' for ~1.5s. For a patient with no UHID the chip is greyed and not clickable (tooltip 'No UHID (non-Bangalore patient)').",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-049",
+      "section": "Patient Detail - Status Chip Three States",
+      "title": "Status chip reflects Alive & Active / Alive & Inactive / Deceased",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Three patients exist: active, inactive, deceased.",
+      "steps": [
+        "Open each of the three patients and inspect the status chip"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Active shows green 'Alive & Active'; inactive shows grey 'Alive & Inactive'; deceased shows dark chip 'Deceased · <date>' with flower icon.",
+      "api_reference": "GET /api/patients/:id"
+    },
+    {
+      "id": "PAT-050",
+      "section": "Patient Detail - Scheduling Strip",
+      "title": "Edit Scheduling updates frequency, priority and notes",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Patient with scheduling meta loaded (strip visible).",
+      "steps": [
+        "Click 'Edit Scheduling'",
+        "Set frequency 14, priority High, notes 'Only morning visits'",
+        "Click Save"
+      ],
+      "test_data": "freq=14, complexity=high, notes='Only morning visits'",
+      "expected_result": "The scheduling dialog saves (updatePatientMeta) and the strip refreshes to show 'Every 14 days' and the note chip. Save shows 'Saving...' while in flight.",
+      "api_reference": "N/A (scheduling API, cross-module)"
+    },
+    {
+      "id": "PAT-051",
+      "section": "Patient Detail - Flag Urgent",
+      "title": "Flag and Unflag patient as urgent",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Patient with scheduling strip visible.",
+      "steps": [
+        "Click 'Flag Urgent', enter a reason, confirm",
+        "Then click 'Unflag'"
+      ],
+      "test_data": "Reason='Rapid deterioration'",
+      "expected_result": "Flagging adds a red 'Flagged' chip with the reason and switches the button to 'Unflag'. Unflagging removes the chip and reverts the button.",
+      "api_reference": "N/A (scheduling API, cross-module)"
+    },
+    {
+      "id": "PAT-052",
+      "section": "Patient Detail - UHID Regenerate (Admin)",
+      "title": "Admin can regenerate UHID for a Bangalore patient with a zone",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Logged in as admin; patient is Bangalore resident with a zone and an existing UHID.",
+      "steps": [
+        "Click the Refresh icon next to the UHID chip",
+        "Read the warning, enter a reason, click 'Regenerate UHID'"
+      ],
+      "test_data": "Reason='Wrong zone selected at registration'",
+      "expected_result": "POST /api/patients/:id/regenerate-uhid returns 200 with a new UHID; header chip updates to the new value; old UHID retained in history (patient still searchable by old UHID).",
+      "api_reference": "POST /api/patients/:id/regenerate-uhid"
+    },
+    {
+      "id": "PAT-053",
+      "section": "Patient Detail - UHID Regenerate Hidden",
+      "title": "Non-admin does not see the Regenerate UHID control",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Logged in as a non-admin (nurse/doctor); Bangalore patient with UHID open.",
+      "steps": [
+        "Inspect the area next to the UHID chip"
+      ],
+      "test_data": "N/A",
+      "expected_result": "The Refresh/regenerate icon is not rendered for non-admins. If the endpoint is called directly it returns 403.",
+      "api_reference": "POST /api/patients/:id/regenerate-uhid"
+    },
+    {
+      "id": "PAT-054",
+      "section": "Patient Detail - UHID Regenerate Guard",
+      "title": "Regenerate UHID blocked for non-Bangalore / no-zone patients",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Admin logged in; patient is non-Bangalore (no zone).",
+      "steps": [
+        "Confirm the regenerate icon is hidden for this patient",
+        "(API) call POST /api/patients/:id/regenerate-uhid for this patient"
+      ],
+      "test_data": "N/A",
+      "expected_result": "The icon only shows for is_bangalore_resident with geographic_cluster. The API returns 400 'cannot_regenerate_uhid' with the explanation message.",
+      "api_reference": "POST /api/patients/:id/regenerate-uhid"
+    },
+    {
+      "id": "PAT-055",
+      "section": "Patient Detail - Tab Navigation",
+      "title": "Switching tabs loads the correct content and resets selected visit",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Patient open.",
+      "steps": [
+        "Click Visits, open a visit, then click Overview",
+        "Click Trends then Past Records"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Each tab renders its component (Overview/Visits/Trends/PastRecords). Changing tabs resets any selected visit so Visits returns to the list, not a stale detail view.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-056",
+      "section": "Overview Tab - Demographics & Clinical Status",
+      "title": "Overview shows demographics, clinical status chips and system info",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Patient with category, zone, UHID and submissions open.",
+      "steps": [
+        "On the Overview tab inspect Demographics, Clinical Status and System Information panels"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Demographics shows name/gender/age/DOB/contact/address/diagnosis/referred from. Clinical Status shows BSC/Onco/Priority/Zone/Homecare/UHID/Hospital UHID/ABHA chips as applicable. System Info shows ABHA address, registered date and submission count.",
+      "api_reference": "GET /api/patients/:id"
+    },
+    {
+      "id": "PAT-057",
+      "section": "Overview Tab - Patient Category Save",
+      "title": "Set/confirm Patient Category & Priority from Overview",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Patient with category 'Not Yet Determined' open.",
+      "steps": [
+        "Scroll to 'Patient Category & Priority' (highlighted when unset)",
+        "Select BSC Non-Onco and Priority Medium, click Save"
+      ],
+      "test_data": "Category=BSC Non-Onco, Priority=medium",
+      "expected_result": "PUT /api/patients/:id sends bsc_status=true,is_onco=false,clinical_complexity=medium. Button shows 'Saved' for ~2s. Header/Clinical Status chips reflect the change after refresh.",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-058",
+      "section": "Overview Tab - Patient Category Validation",
+      "title": "Saving Patient Category without a category selected is blocked",
+      "priority": "Low",
+      "type": "Validation",
+      "preconditions": "Category dropdown left blank.",
+      "steps": [
+        "Leave category unselected, click Save"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Alert 'Please select a patient category'; no PUT call made.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-059",
+      "section": "Overview Tab - Universal PPS Card",
+      "title": "Record a patient-level PPS score and verify derived priority",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Patient open; no PPS recorded yet.",
+      "steps": [
+        "In the PPS card click 'Record PPS'",
+        "Click the PPS 30% row, add a note, click Save PPS"
+      ],
+      "test_data": "PPS=30, notes='Bed bound, total care'",
+      "expected_result": "POST /api/patients/:id/pps returns 201; card shows '30%' and Derived Priority 'High' (0-40 High). clinical_complexity updates everywhere (header chip, edit screen). onSaved refreshes the patient.",
+      "api_reference": "POST /api/patients/:id/pps"
+    },
+    {
+      "id": "PAT-060",
+      "section": "Overview Tab - PPS Priority Mapping",
+      "title": "PPS-to-priority mapping is correct across bands",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Patient open.",
+      "steps": [
+        "Record PPS 80 and check derived priority",
+        "Record PPS 60 and check",
+        "Record PPS 40 and check"
+      ],
+      "test_data": "80 / 60 / 40",
+      "expected_result": "80 -> Low (80-100), 60 -> Medium (50-70), 40 -> High (0-40). Each save updates the card and patient clinical_complexity.",
+      "api_reference": "POST /api/patients/:id/pps"
+    },
+    {
+      "id": "PAT-061",
+      "section": "Overview Tab - PPS Default by Priority",
+      "title": "PPS dialog pre-selects a row based on existing priority when no PPS exists",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Patient with clinical_complexity set (e.g. high) but no PPS recorded.",
+      "steps": [
+        "Open the Record PPS dialog and observe the pre-selected row and the info hint"
+      ],
+      "test_data": "Priority=high",
+      "expected_result": "The top of the priority band is pre-selected (high->40) and an info banner explains it was pre-selected from priority. The user can pick any other row before saving.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-062",
+      "section": "Overview Tab - Care Circle",
+      "title": "Save and re-load Primary Caregiver and Decision Maker",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Patient open.",
+      "steps": [
+        "In Care Circle enter caregiver name/relationship/phone and decision maker name/designation/phone",
+        "Click Save, then refresh the page"
+      ],
+      "test_data": "Caregiver: Ravi / Son / 9123456780; Decision Maker: Dr. Ashwini / Oncologist / 9988776655",
+      "expected_result": "PUT /api/patients/:id persists the six fields. Save button is disabled until a field changes (dirty) and shows 'Saved' afterward. Values persist on reload and prefill the Edit screen.",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-063",
+      "section": "Overview Tab - Body Map Free-Click",
+      "title": "Drop a red dot marker on the body map and save a note",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Patient with an initial visit so the body map renders.",
+      "steps": [
+        "Select the Dot tool, click a spot on the Front view",
+        "Type a finding e.g. 'Tender mass RUQ' and Save"
+      ],
+      "test_data": "Tender mass RUQ",
+      "expected_result": "A red dot + label appears; the annotation persists via PUT/save to doctor_assessment body_map_annotations (saveAssessment 'doctor'). Reloading shows the marker.",
+      "api_reference": "N/A (saranam saveAssessment)"
+    },
+    {
+      "id": "PAT-064",
+      "section": "Overview Tab - Body Map Shapes & Edit",
+      "title": "Draw rectangle/ellipse, edit and delete a marker",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Body map editable.",
+      "steps": [
+        "Select Rectangle, drag to draw an area, add text, Save",
+        "Click the marker label, edit text, Save",
+        "Click again and Delete"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Rectangle/ellipse render in red; editing updates the label; deleting removes it. Each operation persists and survives reload. Empty note text disables Save.",
+      "api_reference": "N/A (saranam saveAssessment)"
+    },
+    {
+      "id": "PAT-065",
+      "section": "Overview Tab - Body Map Clear",
+      "title": "Clear AI suggestions and Clear entire body map confirm dialogs",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Body map has both user notes and AI highlights.",
+      "steps": [
+        "Click 'Clear AI suggestions' and confirm",
+        "Add notes again, click 'Clear entire body map' and confirm"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Each shows a window.confirm; confirming removes AI-only (first) or both layers (second). Cancelling leaves markers intact. Buttons are disabled when there is nothing to clear.",
+      "api_reference": "N/A (saranam savePatientSummary / saveAssessment)"
+    },
+    {
+      "id": "PAT-066",
+      "section": "Overview Tab - Body Map Visit Selector",
+      "title": "Body map 'View' selector shows historical visit highlights read-only",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Patient with at least one follow-up summary containing body_locations.",
+      "steps": [
+        "Open the body map 'View' dropdown",
+        "Select a follow-up visit entry"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Selecting a visit renders that visit's AI highlights read-only (no editing tools); the caption notes 'read-only'. Selecting 'Baseline (editable)' restores edit mode.",
+      "api_reference": "N/A (saranam listFollowupSummaries)"
+    },
+    {
+      "id": "PAT-067",
+      "section": "Overview Tab - AI Patient Summary",
+      "title": "Generate, edit, save and download the AI patient summary",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Patient with saved assessments open.",
+      "steps": [
+        "Click 'Generate Patient Summary'",
+        "Edit the Nursing/Psychosocial/Physiotherapy blocks",
+        "Click Save, then Download PDF"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Generate fills the three narrative blocks (deterministic demographics/scores unchanged); Save persists summary_blocks + body_locations; a 'Saved.' alert and 'Last saved <time>' show. Download PDF triggers a file download. Save is disabled when all blocks are empty.",
+      "api_reference": "N/A (saranam generate/savePatientSummary)"
+    },
+    {
+      "id": "PAT-068",
+      "section": "Overview Tab - AI Summary Overwrite Guard",
+      "title": "Regenerating with unsaved edits prompts an overwrite confirmation",
+      "priority": "Low",
+      "type": "Negative",
+      "preconditions": "Summary generated and edited but not saved.",
+      "steps": [
+        "Edit a block without saving",
+        "Click 'Generate Patient Summary' again"
+      ],
+      "test_data": "N/A",
+      "expected_result": "A dialog 'Regenerate and overwrite your edits?' appears; Cancel keeps the edits, 'Overwrite & Generate' replaces them with a fresh draft.",
+      "api_reference": "N/A (saranam generatePatientSummary)"
+    },
+    {
+      "id": "PAT-069",
+      "section": "Overview Tab - Follow-up Summary History",
+      "title": "Latest Patient Health + Past Records follow-up summaries render",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Patient with >=2 saved follow-up summaries.",
+      "steps": [
+        "View 'Latest Patient Health' card",
+        "Expand 'Past Records' (Show all)"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Latest card shows the newest follow-up summary text with visit number/date. Past Records lists all summaries newest-first with a count chip; expand/collapse works. When none exist, friendly placeholders show.",
+      "api_reference": "N/A (saranam listFollowupSummaries)"
+    },
+    {
+      "id": "PAT-070",
+      "section": "Overview Tab - Nursing Assessment",
+      "title": "Fill, save and reload Nursing Assessment (toggles, pain slider, devices)",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Patient with an initial visit; Nursing accordion expanded.",
+      "steps": [
+        "Set State=Conscious, ADL=Independent, Pain slider=6, tick Urinary Catheter",
+        "Enter wound/bowel/bladder text and Save",
+        "Collapse and reopen the accordion / reload"
+      ],
+      "test_data": "Pain=6, Urinary Catheter=on, wound='2cm sacral'",
+      "expected_result": "saveAssessment 'nursing' succeeds; accordion status chip flips to 'Saved'. Reloading restores all values including the pain score and device checkboxes.",
+      "api_reference": "N/A (saranam saveAssessment 'nursing')"
+    },
+    {
+      "id": "PAT-071",
+      "section": "Overview Tab - Nursing AI Summary Guard",
+      "title": "Nursing auto-generate summary requires a saved record first",
+      "priority": "Low",
+      "type": "Negative",
+      "preconditions": "Nursing form open but never saved.",
+      "steps": [
+        "Click 'Generate from assessment' before saving"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Alert 'Save the assessment first — the AI summary reads the saved record.' and the button is disabled until hasSavedRow is true.",
+      "api_reference": "N/A (saranam generateAssessmentSummary)"
+    },
+    {
+      "id": "PAT-072",
+      "section": "Overview Tab - Doctor Assessment",
+      "title": "Fill ICD diagnosis rows + clinical history and save Doctor Assessment",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Initial visit; Doctor accordion expanded.",
+      "steps": [
+        "Add a diagnosis row (code C50.9, name 'Ca Breast Stage III', type Primary)",
+        "Fill chief complaints, HPI, systemic exam fields",
+        "Click Save Doctor's Assessment"
+      ],
+      "test_data": "C50.9 / Ca Breast Stage III / Primary",
+      "expected_result": "saveAssessment 'doctor' stores a combined diagnosis string and exam fields; status chip flips to 'Saved'; reload restores data (diagnosis parsed back into a row).",
+      "api_reference": "N/A (saranam saveAssessment 'doctor')"
+    },
+    {
+      "id": "PAT-073",
+      "section": "Overview Tab - ESAS-R Scores",
+      "title": "Set ESAS-R symptom sliders 0-10 and verify total + color coding",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Initial visit; ESAS-R accordion expanded.",
+      "steps": [
+        "Set Pain=8, Tiredness=5, Nausea=2, others 0; add an 'Other' symptom name+score",
+        "Observe the total and Save"
+      ],
+      "test_data": "Pain=8, Tiredness=5, Nausea=2, Other='Itching'=4",
+      "expected_result": "Each slider is constrained to 0-10. Total = sum of all (incl. other) and is color-coded (<=30 green, <=60 yellow, else red). saveAssessment 'esas' stores total_score and all symptoms; reload restores.",
+      "api_reference": "N/A (saranam saveAssessment 'esas')"
+    },
+    {
+      "id": "PAT-074",
+      "section": "Overview Tab - PPS Form (Visit-scoped)",
+      "title": "Select a PPS row in the baseline PPS form and save",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Initial visit; PPS accordion expanded.",
+      "steps": [
+        "Click the 70% row (shows median survival)",
+        "Add a note and click Save PPS Score"
+      ],
+      "test_data": "PPS=70",
+      "expected_result": "Selected row highlights with a color band; the header shows 'PPS 70%' and '~145 days median survival'. saveAssessment 'pps' stores the full PPS dimensions; status chip becomes 'Saved'.",
+      "api_reference": "N/A (saranam saveAssessment 'pps')"
+    },
+    {
+      "id": "PAT-075",
+      "section": "Overview Tab - PPS Save Validation",
+      "title": "Saving PPS form without selecting a score is blocked",
+      "priority": "Low",
+      "type": "Validation",
+      "preconditions": "Fresh PPS form, no priority default, no row selected.",
+      "steps": [
+        "Without selecting a row, click Save PPS Score"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Alert 'Please select a PPS score'; no save call.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-076",
+      "section": "Overview Tab - PPS Smart Suggestion",
+      "title": "Smart PPS suggestion generates a score with reasoning",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Initial visit with nursing/doctor/ESAS data saved.",
+      "steps": [
+        "Click 'Suggest PPS Score'",
+        "Click 'Apply Score' and toggle 'Show reasoning'"
+      ],
+      "test_data": "N/A",
+      "expected_result": "A suggested score with a confidence badge and reasoning bullets appears; 'Apply Score' sets the table selection; reasoning expands/collapses. On failure an alert 'Failed to generate suggestion' shows.",
+      "api_reference": "N/A (saranam suggestPps)"
+    },
+    {
+      "id": "PAT-077",
+      "section": "Overview Tab - Psychological Assessment",
+      "title": "Complete Psychological Assessment incl. distress slider and Zarit",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Initial visit; Psychological accordion expanded.",
+      "steps": [
+        "Set patient mood/sleep, tick problem categories, set distress slider",
+        "Answer the 4 Zarit questions and Save"
+      ],
+      "test_data": "Distress=7, Zarit answers mixed",
+      "expected_result": "Distress slider color-codes; Zarit total + interpretation compute; saveAssessment 'psychological' stores values; status chip 'Saved'; reload restores.",
+      "api_reference": "N/A (saranam saveAssessment 'psychological')"
+    },
+    {
+      "id": "PAT-078",
+      "section": "Overview Tab - Physiotherapy Assessment",
+      "title": "Complete and save Physiotherapy Assessment (pain VAS, ROM, MMT)",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Initial visit; Physiotherapy accordion expanded.",
+      "steps": [
+        "Set pain VAS, pain area/nature, posture, ROM, MMT, balance, functional status, notes",
+        "Click Save"
+      ],
+      "test_data": "Pain VAS=5, ROM='Reduced shoulder', MMT='4/5'",
+      "expected_result": "saveAssessment 'physiotherapy' succeeds; status chip 'Saved'; data persists and appears in Past Records.",
+      "api_reference": "N/A (saranam saveAssessment 'physiotherapy')"
+    },
+    {
+      "id": "PAT-079",
+      "section": "Overview Tab - Plan of Care / Prescription",
+      "title": "Build a prescription, add medications and save Plan of Care",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Initial visit; Plan of Care accordion expanded.",
+      "steps": [
+        "Add a medication (name/dosage/frequency/duration) in the Prescription Builder",
+        "Enter pharmacological + non-pharmacological notes, diagnosis text",
+        "Click Save Prescription then Save Plan of Care"
+      ],
+      "test_data": "Med: Morphine 10mg BD x 7d",
+      "expected_result": "saveAssessment 'care-plan' stores medications + notes; success alert shows; status chip 'Saved'. Data round-trips on reload.",
+      "api_reference": "N/A (saranam saveAssessment 'care-plan')"
+    },
+    {
+      "id": "PAT-080",
+      "section": "Overview Tab - Prescription PDF",
+      "title": "Download prescription PDF from Plan of Care",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Prescription has at least one medication and doctor info filled.",
+      "steps": [
+        "Fill doctor name/qualification/KMC number",
+        "Click the Download PDF action"
+      ],
+      "test_data": "Dr. Ashwini, MD, KMC=12345",
+      "expected_result": "A prescription PDF is generated with patient name, UHID/homecare code, medications and doctor details; failures show an alert with the error.",
+      "api_reference": "N/A (client-side PDF)"
+    },
+    {
+      "id": "PAT-081",
+      "section": "Overview Tab - UHID Preview",
+      "title": "UHID preview card shows probable UHID for an eligible patient",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Bangalore patient with zone + linked hospital, no UHID yet, initial visit not complete.",
+      "steps": [
+        "Scroll to the bottom of the Initial Assessment block before completing it"
+      ],
+      "test_data": "N/A",
+      "expected_result": "GET /api/patients/uhid/preview fires and a 'UHID Preview' card shows the Homecare UHID Code and probable UHID with an 'estimate' note. The complete button reads 'Mark Complete and Assign UHID'.",
+      "api_reference": "GET /api/patients/uhid/preview"
+    },
+    {
+      "id": "PAT-082",
+      "section": "Overview Tab - UHID Preview Warning",
+      "title": "Missing zone/hospital shows warning instead of UHID preview",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Bangalore patient with no zone or no linked hospital, no UHID.",
+      "steps": [
+        "Open Overview and scroll to the complete button area"
+      ],
+      "test_data": "N/A",
+      "expected_result": "No preview card; a warning 'Set the patient's zone and linked hospital before completing the initial assessment to auto-generate a UHID.' shows. previewUhid is not requested (or returns 400 for invalid params).",
+      "api_reference": "GET /api/patients/uhid/preview"
+    },
+    {
+      "id": "PAT-083",
+      "section": "Overview Tab - Mark Initial Assessment Complete",
+      "title": "Marking initial assessment complete assigns a UHID",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "Eligible Bangalore patient with UHID preview (PAT-081).",
+      "steps": [
+        "Click 'Mark Complete and Assign UHID'",
+        "Read the confirmation alert"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Visit status -> completed; an alert 'Initial assessment completed. UHID <value> assigned.' shows; patient refreshes and the header/Clinical Status chips now display the real UHID. The block now shows 'Initial Assessment Completed'.",
+      "api_reference": "N/A (saranam updateVisit); GET /api/patients/:id refresh"
+    },
+    {
+      "id": "PAT-084",
+      "section": "Overview Tab - Non-Bangalore No UHID",
+      "title": "Non-Bangalore patient never gets a UHID on completion",
+      "priority": "Medium",
+      "type": "Data Integrity",
+      "preconditions": "Non-Bangalore patient (is_bangalore_resident=false), initial visit not complete.",
+      "steps": [
+        "Open Overview, confirm no UHID preview/card",
+        "Click 'Mark Initial Assessment as Complete'"
+      ],
+      "test_data": "N/A",
+      "expected_result": "No UHID preview card. On completion the visit is marked completed but no UHID is assigned (UHID chip stays '—'); the button label is the non-UHID variant.",
+      "api_reference": "N/A (saranam updateVisit)"
+    },
+    {
+      "id": "PAT-085",
+      "section": "Overview Tab - No Initial Visit",
+      "title": "Overview shows info note when no initial visit exists",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "Patient with no initial visit record.",
+      "steps": [
+        "Open the Overview tab"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Instead of assessment accordions, an info alert 'No initial visit record found...' is shown; the body map section is hidden.",
+      "api_reference": "N/A (saranam getInitialVisit)"
+    },
+    {
+      "id": "PAT-086",
+      "section": "Visits Tab - List",
+      "title": "Visits tab lists existing visits with count and status",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Patient with >=1 visit.",
+      "steps": [
+        "Open the Visits tab"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Header shows 'N Visits'. Each visit shows visit number, type label, date, location, BP summary (if any) and a status chip (completed/in_progress/scheduled/cancelled). saranam listVisits is called.",
+      "api_reference": "N/A (saranam listVisits)"
+    },
+    {
+      "id": "PAT-087",
+      "section": "Visits Tab - Empty",
+      "title": "Visits tab empty state offers 'Record First Visit'",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "Patient with no visits.",
+      "steps": [
+        "Open the Visits tab"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Shows 'No visits recorded yet' with a 'Record First Visit' button that opens the New Visit dialog.",
+      "api_reference": "N/A (saranam listVisits)"
+    },
+    {
+      "id": "PAT-088",
+      "section": "Visits Tab - Create Follow-up Visit",
+      "title": "Create a follow-up visit with vitals",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Patient open; Visits tab.",
+      "steps": [
+        "Click 'New Visit'",
+        "Type=Follow-Up, set date, Location=Home, enter vitals (PR 80, BP 120/80, SpO2 98)",
+        "Click Create Visit"
+      ],
+      "test_data": "PR=80, BP=120/80, SpO2=98",
+      "expected_result": "saranam createVisit succeeds; dialog closes; the new visit appears at the top of the list with the vitals summary. Empty vitals are sent as null.",
+      "api_reference": "N/A (saranam createVisit)"
+    },
+    {
+      "id": "PAT-089",
+      "section": "Visits Tab - Teleconsult Validation",
+      "title": "Teleconsult requires provider and time",
+      "priority": "High",
+      "type": "Validation",
+      "preconditions": "New Visit dialog open.",
+      "steps": [
+        "Set Visit Type = Teleconsult (location switches to Video Call, time picker appears)",
+        "Leave provider unselected and click Schedule Teleconsult"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Error 'Please pick a provider for the teleconsult.' (and 'Please pick a time.' if time is blank). No visit/session created until both are set.",
+      "api_reference": "N/A (saranam createVisit + teleconsult scheduleSession)"
+    },
+    {
+      "id": "PAT-090",
+      "section": "Visits Tab - Teleconsult Create",
+      "title": "Schedule a video teleconsult creates both a visit and a tele session",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "New Visit dialog; a provider exists.",
+      "steps": [
+        "Type=Teleconsult, Location=Video Call, pick a provider, set a future time, toggle 'Record this call'",
+        "Click Schedule Teleconsult"
+      ],
+      "test_data": "Video, provider selected, record=on",
+      "expected_result": "createVisit then teleconsult scheduleSession are both called (channel=video, record_call=true, scheduled_at ISO from date+time). Info note about notifications is shown. The visit appears in the list.",
+      "api_reference": "N/A (saranam createVisit + teleconsult scheduleSession)"
+    },
+    {
+      "id": "PAT-091",
+      "section": "Visits Tab - Visit Type / Location Coupling",
+      "title": "Switching away from Teleconsult resets location to Home",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "New Visit dialog; Teleconsult selected with Video location.",
+      "steps": [
+        "Switch Visit Type from Teleconsult back to Follow-Up"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Location dropdown reverts to {Home} and value resets to 'home'; the time picker, provider select and record toggle disappear.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-092",
+      "section": "Visit Detail - Follow-Up Sheet Load",
+      "title": "Opening a visit loads the Follow-Up Sheet with saved data + baseline",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "A follow-up visit with previously saved data exists.",
+      "steps": [
+        "Open the Visits tab and click a visit",
+        "Expand the 'Initial Assessment (Baseline)' read-only block"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Visit, doctor and psychological assessments and care-plan load into the sheet. Baseline shows diagnosis/pain/ESAS/PPS/medications read-only. Header shows visit number, type label and full date.",
+      "api_reference": "N/A (saranam getVisit/getAssessment/getInitialVisit)"
+    },
+    {
+      "id": "PAT-093",
+      "section": "Visit Detail - Save Follow-Up",
+      "title": "Edit vitals/notes and Save Follow-Up persists",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Visit detail open.",
+      "steps": [
+        "Enter chief complaints, HPI, vitals (incl. GRBS), follow-up advice, visit summary",
+        "Click Save Follow-Up"
+      ],
+      "test_data": "PR=72, GRBS=110, summary='Stable'",
+      "expected_result": "updateVisit + saveAssessment('doctor') (+ psychological if present) succeed; button shows 'Saved!' for ~3s; reload shows the saved data.",
+      "api_reference": "N/A (saranam updateVisit/saveAssessment)"
+    },
+    {
+      "id": "PAT-094",
+      "section": "Visit Detail - Save & Mark Complete",
+      "title": "Save & Mark Complete sets the visit to completed and returns to the list",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Visit detail open.",
+      "steps": [
+        "Click 'Save & Mark Complete'"
+      ],
+      "test_data": "N/A",
+      "expected_result": "The follow-up saves, then updateVisit sets status='completed', and the view returns to the visit list where the visit shows a green 'completed' chip.",
+      "api_reference": "N/A (saranam updateVisit)"
+    },
+    {
+      "id": "PAT-095",
+      "section": "Visit Detail - Patient Outcome Deceased Validation",
+      "title": "Ticking 'Patient has passed away' requires a date of death",
+      "priority": "High",
+      "type": "Validation",
+      "preconditions": "Visit detail open.",
+      "steps": [
+        "Tick 'Patient has passed away', clear the auto-filled date",
+        "Click Save Follow-Up"
+      ],
+      "test_data": "Date of death = (blank)",
+      "expected_result": "Alert 'Please set the date of death before saving.'; save aborts. The date input rejects future dates (max=today).",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-096",
+      "section": "Visit Detail - Patient Outcome Others Remark",
+      "title": "Place of death 'Others' requires remarks",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Visit detail; deceased ticked with a valid date.",
+      "steps": [
+        "Set Place of death = Others, leave Remarks blank",
+        "Click Save Follow-Up"
+      ],
+      "test_data": "Place=Others, Remarks=(blank)",
+      "expected_result": "Alert 'Please describe the place of death in Remarks.'; save aborts until remarks are entered.",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-097",
+      "section": "Visit Detail - Mark Deceased from Visit",
+      "title": "Marking deceased from a visit updates the patient record",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "Visit detail; alive patient.",
+      "steps": [
+        "Tick passed away, set date 2026-05-20, Place=Home",
+        "Click Save Follow-Up",
+        "Navigate back to the patient header"
+      ],
+      "test_data": "DoD=2026-05-20, Place=Home",
+      "expected_result": "PUT /api/patients/:id sends is_deceased=true + date/place; the patient header now shows the Deceased chip with the date; the patient is removed from the scheduling pool (care_status auto-demoted).",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-098",
+      "section": "Visit Detail - Untick Deceased",
+      "title": "Un-ticking deceased reverts the patient to alive and clears death fields",
+      "priority": "Medium",
+      "type": "Data Integrity",
+      "preconditions": "A deceased patient's visit detail open.",
+      "steps": [
+        "Untick 'Patient has passed away'",
+        "Click Save Follow-Up"
+      ],
+      "test_data": "N/A",
+      "expected_result": "PUT /api/patients/:id sends is_deceased=false and nulls date_of_death/place_of_death/remarks; header reverts to Alive status.",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-099",
+      "section": "Visit Detail - Visit Prescription",
+      "title": "Save and download a per-visit prescription",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Visit detail open.",
+      "steps": [
+        "In the Prescription block add a medication, set diagnosis text",
+        "Click Save (prescription), then Download PDF"
+      ],
+      "test_data": "Med: Paracetamol 500mg TDS",
+      "expected_result": "saveAssessment('care-plan') for the visit succeeds (Saved state). Download PDF generates a prescription document; missing data fails with an alert, not a crash.",
+      "api_reference": "N/A (saranam saveAssessment 'care-plan')"
+    },
+    {
+      "id": "PAT-100",
+      "section": "Visit Detail - Follow-up AI Summary",
+      "title": "Follow-up AI summary generate/save shown only for non-initial visits",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "A follow-up visit detail open.",
+      "steps": [
+        "Click Generate in 'Follow-up Visit Summary', edit, click Save",
+        "Open an initial visit and confirm the card is absent"
+      ],
+      "test_data": "N/A",
+      "expected_result": "For follow-ups, generate fills the textarea + body map highlights; Save persists (saveFollowupSummary) and shows 'Last saved'. For initial visits the FollowupSummaryCard does not render.",
+      "api_reference": "N/A (saranam generate/saveFollowupSummary)"
+    },
+    {
+      "id": "PAT-101",
+      "section": "Trends Tab - Charts",
+      "title": "Trends tab renders Vitals, ESAS-R and PPS charts",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Patient with vitals across visits + ESAS + PPS history.",
+      "steps": [
+        "Open the Trends tab",
+        "Inspect the three chart sections"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Three calls (saranam getPatientScores for esas/pps/vitals) load. Vitals chart shows source legend + tab selector; ESAS chart shows symptom toggles + total burden area; PPS chart shows bands and latest PPS detail cards.",
+      "api_reference": "N/A (saranam getPatientScores)"
+    },
+    {
+      "id": "PAT-102",
+      "section": "Trends Tab - Vital Tab Selector",
+      "title": "Switching vital tabs changes the plotted metric and Y-domain",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Vitals trend rendered.",
+      "steps": [
+        "Click each vital tab: Blood Pressure, Pulse Rate, SpO2, Temperature, Resp. Rate, GRBS"
+      ],
+      "test_data": "N/A",
+      "expected_result": "BP plots systolic + diastolic; the others plot a single line. The Y-axis domain and normal-range band change per metric; baseline reference line appears where baseline data exists.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-103",
+      "section": "Trends Tab - ESAS Symptom Toggles",
+      "title": "ESAS symptom toggles show/hide individual lines + Show/Hide All",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "ESAS data exists.",
+      "steps": [
+        "Toggle off Pain, then Tiredness",
+        "Click 'Hide All' then 'Show All'"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Each toggled symptom line disappears/reappears. 'Hide All'/'Show All' clears/restores all symptom lines.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-104",
+      "section": "Trends Tab - Baseline Comparison",
+      "title": "Change-from-baseline cards compute deltas and improve/deteriorate status",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Patient has baseline + latest vitals.",
+      "steps": [
+        "Scroll to 'Change from Baseline (Initial Visit)'"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Each vital card shows latest value, delta vs baseline with up/down icon, reference range, and improved/deteriorated/stable coloring based on proximity to the range center.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-105",
+      "section": "Trends Tab - Empty",
+      "title": "Trends tab shows empty state when no assessment data exists",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "Patient with no vitals/ESAS/PPS.",
+      "steps": [
+        "Open the Trends tab"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Shows 'No assessment data recorded yet' with guidance text; no chart sections render.",
+      "api_reference": "N/A (saranam getPatientScores)"
+    },
+    {
+      "id": "PAT-106",
+      "section": "Past Records Tab - Timeline",
+      "title": "Past Records timeline loads cross-module events newest-first",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Patient with visits, assessments, dispensings or forms.",
+      "steps": [
+        "Open the Past Records tab",
+        "Expand a 'Home Visit' event"
+      ],
+      "test_data": "N/A",
+      "expected_result": "GET /api/patients/:id/full-history loads. Timeline shows registration + visits + encounters + IPD + dispensing + forms, newest first. Expanding a home visit reveals vitals badges, assessment summaries and prescription.",
+      "api_reference": "GET /api/patients/:id/full-history"
+    },
+    {
+      "id": "PAT-107",
+      "section": "Past Records Tab - Filters",
+      "title": "Type filter chips narrow the timeline",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Patient with multiple event types.",
+      "steps": [
+        "Click 'Home Visits', then 'Medicines', then 'All'"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Only chips with count>0 (plus All) render. Selecting a type filters events to that type; counts in each chip match the summary returned by the API.",
+      "api_reference": "GET /api/patients/:id/full-history"
+    },
+    {
+      "id": "PAT-108",
+      "section": "Past Records Tab - Empty",
+      "title": "Past Records empty state when no history",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "Newly registered patient with no events beyond registration is unavailable; use a patient with zero events.",
+      "steps": [
+        "Open Past Records for a patient with no recorded events"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Shows 'No records found' with guidance text; no timeline rendered.",
+      "api_reference": "GET /api/patients/:id/full-history"
+    },
+    {
+      "id": "PAT-109",
+      "section": "Past Records Tab - Data Integrity",
+      "title": "Saved visit/assessment data appears correctly in Past Records",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "Just saved a follow-up visit with vitals + ESAS + PPS (from PAT-093/074/073).",
+      "steps": [
+        "Open Past Records and expand the corresponding home visit"
+      ],
+      "test_data": "N/A",
+      "expected_result": "The expanded event shows the exact vitals (BP/PR/SpO2/Temp/RR/GRBS), ESAS scores per symptom + total, PPS score and dimensions, and prescription medications that were saved.",
+      "api_reference": "GET /api/patients/:id/full-history"
+    },
+    {
+      "id": "PAT-110",
+      "section": "Patient Edit - Load & Prefill",
+      "title": "Edit screen prefills all fields from the patient record",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "A patient with full data exists.",
+      "steps": [
+        "From the patient header click the Edit (pencil) icon, or open /patients/:id/edit"
+      ],
+      "test_data": "N/A",
+      "expected_result": "GET /api/patients/:id loads and the form prefills name, DOB (normalised to YYYY-MM-DD), gender, phone (without +91), email, alternative phone+name, hospital UHID, care circle, address, diagnosis, referral, category, priority, care status, Bangalore resident + zone + linked hospital. UHID/homecare chips show read-only with explanatory note.",
+      "api_reference": "GET /api/patients/:id"
+    },
+    {
+      "id": "PAT-111",
+      "section": "Patient Edit - Required Name",
+      "title": "Full Name is required on edit",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Edit screen open.",
+      "steps": [
+        "Clear Full Name and click Save Changes"
+      ],
+      "test_data": "Full Name = (blank)",
+      "expected_result": "The Full Name field is marked required; saving with it blank should be prevented or rejected by the backend with a visible error (no silent blank save).",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-112",
+      "section": "Patient Edit - Phone Normalisation",
+      "title": "Phone fields strip non-digits, cap at 10, and store +91",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Edit screen open.",
+      "steps": [
+        "Type 'abc91234567890' into Phone Number",
+        "Save and re-open the edit screen"
+      ],
+      "test_data": "abc91234567890",
+      "expected_result": "Input shows only 10 digits (9123456789); on save it is stored as +919123456789. Re-opening shows the 10 digits without the +91 prefix.",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-113",
+      "section": "Patient Edit - Update Happy Path",
+      "title": "Edit demographics and save successfully with redirect",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Edit screen open.",
+      "steps": [
+        "Change diagnosis, gender and add an alternative phone+relationship",
+        "Click Save Changes"
+      ],
+      "test_data": "Diagnosis='Lung cancer', Alt='9123456780', Name='Sita (Wife)'",
+      "expected_result": "PUT /api/patients/:id succeeds; a green 'Patient updated successfully!' alert shows; after ~0.8s it redirects to /patients/:id where changes are reflected.",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-114",
+      "section": "Patient Edit - Category Derivation",
+      "title": "Editing Patient Category updates bsc_status + is_onco",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Edit screen open.",
+      "steps": [
+        "Change Patient Category to 'Non-BSC Onco' and save"
+      ],
+      "test_data": "Non-BSC Onco",
+      "expected_result": "PUT sends bsc_status=false,is_onco=true; the detail page chips show N-BSC + Onco afterwards.",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-115",
+      "section": "Patient Edit - Bangalore Toggle",
+      "title": "Toggling Bangalore Resident reveals/clears zone + hospital",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Edit screen open; patient currently non-Bangalore.",
+      "steps": [
+        "Turn on 'Bangalore Resident'",
+        "Set zone South and a linked hospital, save",
+        "Turn it off again and save"
+      ],
+      "test_data": "Zone=South, Hospital=KMIO",
+      "expected_result": "Turning on shows Bangalore Zone + Linked Hospital (defaults KMIO). Saving sends geographic_cluster + linked_hospital. Turning off clears both fields and the save omits them (or nulls them).",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-116",
+      "section": "Patient Edit - Inline Add Hospital",
+      "title": "Add a new hospital inline from the Edit screen",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Edit screen; Bangalore resident on.",
+      "steps": [
+        "Click + next to Linked Hospital, add code 'BGH' + name, click Add"
+      ],
+      "test_data": "Code=BGH, Name=Baptist General",
+      "expected_result": "POST /api/patients/config/hospital-options adds the hospital and auto-selects it in Linked Hospital.",
+      "api_reference": "POST /api/patients/config/hospital-options"
+    },
+    {
+      "id": "PAT-117",
+      "section": "Patient Edit - Care Status",
+      "title": "Change care status between Active and Inactive (alive patient)",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Edit screen; alive patient.",
+      "steps": [
+        "Set Care Status = 'Alive & Inactive' and save",
+        "Reopen and set back to 'Alive & Active'"
+      ],
+      "test_data": "inactive / active",
+      "expected_result": "PUT sends care_status accordingly (only when not deceased). The detail header chip reflects 'Alive & Inactive' / 'Alive & Active'. Inactive patients drop out of the scheduling pool.",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-118",
+      "section": "Patient Edit - Mark Deceased from Edit",
+      "title": "Mark as Deceased from the Edit screen",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Edit screen; alive patient.",
+      "steps": [
+        "Click 'Mark as Deceased'",
+        "Set date + place in the dialog, confirm"
+      ],
+      "test_data": "DoD=2026-05-30, Place=Hospital",
+      "expected_result": "MarkDeceasedDialog saves via PUT /api/patients/:id (is_deceased=true). The Patient Status section switches to the 'Marked as Deceased' read-only summary with an 'Edit Death Record' button.",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-119",
+      "section": "Patient Edit - Cancel",
+      "title": "Cancel returns to detail without saving",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Edit screen with unsaved changes.",
+      "steps": [
+        "Make an edit then click Cancel (or Back to Patient)"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Navigates back to /patients/:id; no PUT is sent and the change is discarded.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-120",
+      "section": "Patient Edit - Not Found",
+      "title": "Edit URL for a missing patient shows 'Patient not found'",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Logged in.",
+      "steps": [
+        "Open /patients/<non-existent-uuid>/edit"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Loading resolves to a 'Patient not found' error state; no editable form is shown.",
+      "api_reference": "GET /api/patients/:id"
+    },
+    {
+      "id": "PAT-121",
+      "section": "Mark Deceased Dialog - Date Required",
+      "title": "Mark Deceased requires a date of death",
+      "priority": "High",
+      "type": "Validation",
+      "preconditions": "Mark Deceased dialog open from header.",
+      "steps": [
+        "Clear the date field",
+        "Observe the Confirm Death button and try to save"
+      ],
+      "test_data": "Date = (blank)",
+      "expected_result": "Confirm Death is disabled when date is blank; if forced, an error 'Date of death is required' shows. Date input caps at today (no future deaths).",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-122",
+      "section": "Mark Deceased Dialog - Others Remark",
+      "title": "Place 'Others' requires remarks in the dialog",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Mark Deceased dialog open with a valid date.",
+      "steps": [
+        "Select Place = Others, leave Remarks blank, click Confirm Death"
+      ],
+      "test_data": "Place=Others, Remarks=(blank)",
+      "expected_result": "Error 'Please describe the place of death in Remarks'; save blocked until remarks are entered.",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-123",
+      "section": "Mark Deceased Dialog - Edit Mode",
+      "title": "Re-opening for a deceased patient pre-fills and titles 'Edit Death Record'",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "A deceased patient open.",
+      "steps": [
+        "Click the flower icon in the header (tooltip 'Edit death record')",
+        "Observe pre-filled date/place/remarks and the dialog title/button"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Dialog title 'Edit Death Record', button 'Update', and fields pre-filled with existing date/place/remarks. Saving updates the record.",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-124",
+      "section": "Mark Deceased Dialog - Cross-Module Reflect",
+      "title": "Marking deceased reflects on list cards and removes from scheduling",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "Alive patient appears in /patients list and the scheduling pool.",
+      "steps": [
+        "Mark the patient deceased via the dialog",
+        "Return to /patients (grid + table) and check the scheduling pool/day map"
+      ],
+      "test_data": "N/A",
+      "expected_result": "The patient card/row shows a 'Deceased' badge; the detail header shows the Deceased chip; the patient no longer appears in the active scheduling pool (care_status auto-demoted to inactive by the backend).",
+      "api_reference": "PUT /api/patients/:id"
+    },
+    {
+      "id": "PAT-125",
+      "section": "Data Integrity - New Patient Propagation",
+      "title": "A newly created patient appears in list, search and selector",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "Register a new patient (PAT-041).",
+      "steps": [
+        "After creation, view the /patients list",
+        "Search by the new patient's name",
+        "Open a flow using PatientSelector/PatientSearch and search for the patient"
+      ],
+      "test_data": "Lakshmi Devi",
+      "expected_result": "The new patient appears in the list (count incremented), is found by search, and shows up in the PatientSearch autocomplete (>=2 chars) and PatientSelector results.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-126",
+      "section": "Data Integrity - PPS Sync Across Surfaces",
+      "title": "PPS recorded on Overview reflects on header, edit screen and Trends",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "Patient open.",
+      "steps": [
+        "Record PPS 30 via the PPS card",
+        "Check the header Priority chip, the Edit screen Priority field, and the Trends PPS chart"
+      ],
+      "test_data": "PPS=30",
+      "expected_result": "Header chip shows Priority: High; Edit screen 'Patient Priority' shows high with helper text referencing the PPS %; Trends PPS chart adds the new data point.",
+      "api_reference": "POST /api/patients/:id/pps; GET /api/patients/:id"
+    },
+    {
+      "id": "PAT-127",
+      "section": "API - Per-page Cap",
+      "title": "List per_page is capped at 100 server-side",
+      "priority": "Low",
+      "type": "API",
+      "preconditions": "API access (logged in).",
+      "steps": [
+        "Call GET /api/patients?per_page=500"
+      ],
+      "test_data": "per_page=500",
+      "expected_result": "Response per_page is clamped to 100; total_pages computed accordingly; no error.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-128",
+      "section": "API - Duplicate Check Response",
+      "title": "Duplicate-check returns false for a brand-new ABHA address",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "API access.",
+      "steps": [
+        "POST /api/patients/duplicate-check with a never-used abha_address"
+      ],
+      "test_data": "{\"abha_address\":\"newuser.unique@abdm\"}",
+      "expected_result": "200 with {\"duplicate_found\": false}; for an existing one it returns {\"duplicate_found\": true, \"patient\": {...}}.",
+      "api_reference": "POST /api/patients/duplicate-check"
+    },
+    {
+      "id": "PAT-129",
+      "section": "API - UHID Preview Invalid Params",
+      "title": "UHID preview rejects missing/invalid zone or hospital",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "API access.",
+      "steps": [
+        "GET /api/patients/uhid/preview with no zone",
+        "GET with zone=Atlantis",
+        "GET with a valid zone but hospital=ZZZ"
+      ],
+      "test_data": "zone omitted; zone=Atlantis; hospital=ZZZ",
+      "expected_result": "Missing zone -> 400 missing_zone; invalid zone -> 400 invalid_zone (lists valid zones); invalid hospital -> 400 invalid_hospital.",
+      "api_reference": "GET /api/patients/uhid/preview"
+    },
+    {
+      "id": "PAT-130",
+      "section": "API - Patient PPS Bounds",
+      "title": "POST patient PPS rejects out-of-range / non-integer scores",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "API access; a valid patient id.",
+      "steps": [
+        "POST /api/patients/:id/pps with pps_score=120",
+        "POST with pps_score='abc'",
+        "POST with pps_score=null"
+      ],
+      "test_data": "120 ; 'abc' ; null",
+      "expected_result": "120 -> 400 'pps_score must be 0-100'; 'abc' -> 400 'pps_score must be an integer 0-100'; null -> 400. A valid 0-100 returns 201 with pps + priority.",
+      "api_reference": "POST /api/patients/:id/pps"
+    },
+    {
+      "id": "PAT-131",
+      "section": "API - PPS Patient Not Found",
+      "title": "POST PPS for a non-existent patient returns 404",
+      "priority": "Low",
+      "type": "API",
+      "preconditions": "API access.",
+      "steps": [
+        "POST /api/patients/<missing-uuid>/pps with pps_score=50"
+      ],
+      "test_data": "missing uuid, pps_score=50",
+      "expected_result": "404 'Patient not found'.",
+      "api_reference": "POST /api/patients/:id/pps"
+    },
+    {
+      "id": "PAT-132",
+      "section": "API - Zone Detect Missing Coords",
+      "title": "Zone detect requires lat and lng",
+      "priority": "Low",
+      "type": "API",
+      "preconditions": "API access.",
+      "steps": [
+        "POST /api/patients/zones/detect with empty body",
+        "POST with valid Bangalore coords"
+      ],
+      "test_data": "{} ; {\"lat\":12.97,\"lng\":77.59}",
+      "expected_result": "Empty -> 400 'lat and lng are required'. Valid coords -> 200 {zone: 'Central'|...} or null if outside all GBA corporations.",
+      "api_reference": "POST /api/patients/zones/detect"
+    },
+    {
+      "id": "PAT-133",
+      "section": "API - Config Diagnosis Validation",
+      "title": "Diagnosis options config enforces duplicate/not-found rules",
+      "priority": "Low",
+      "type": "API",
+      "preconditions": "API access.",
+      "steps": [
+        "POST diagnosis-options with an existing option",
+        "DELETE diagnosis-options for an option not in the list",
+        "PUT diagnosis-options with an empty array"
+      ],
+      "test_data": "existing option; missing option; []",
+      "expected_result": "Existing -> 409 'Option already exists'; missing -> 404 'Option not found'; empty array -> 400 'options must be a non-empty array'.",
+      "api_reference": "POST/DELETE/PUT /api/patients/config/diagnosis-options"
+    },
+    {
+      "id": "PAT-134",
+      "section": "API - Hospital Immutability",
+      "title": "Hospital code and homecare_prefix are immutable on update",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "API access; existing hospital KMIO.",
+      "steps": [
+        "PUT hospital-options changing KMIO's homecare_prefix",
+        "PUT with two entries flagged is_default=true",
+        "PUT with duplicate codes"
+      ],
+      "test_data": "changed prefix; two defaults; duplicate codes",
+      "expected_result": "Changing prefix -> 422 'homecare_prefix is immutable...'; two defaults -> 422 'only one hospital may have is_default=true'; duplicate codes -> 422 'duplicate codes in payload'.",
+      "api_reference": "PUT /api/patients/config/hospital-options"
+    },
+    {
+      "id": "PAT-135",
+      "section": "API - Hospital Delete Behaviour",
+      "title": "Hospital delete soft-deletes when referenced, hard-deletes when not",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "API access; one referenced hospital and one unused hospital; one is default.",
+      "steps": [
+        "DELETE an unused, non-default hospital",
+        "DELETE a hospital referenced by a patient",
+        "DELETE the current default hospital"
+      ],
+      "test_data": "unused code; referenced code; default code",
+      "expected_result": "Unused -> 200 mode 'hard'. Referenced -> 200 mode 'soft' with counts. Default -> 409 'cannot_delete_default'.",
+      "api_reference": "DELETE /api/patients/config/hospital-options"
+    },
+    {
+      "id": "PAT-136",
+      "section": "Session - Token Attached",
+      "title": "All patient requests include the Bearer token",
+      "priority": "High",
+      "type": "API",
+      "preconditions": "Logged in; DevTools Network open.",
+      "steps": [
+        "Open /patients and inspect the request headers for GET /api/patients"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Every /api/patients request carries 'Authorization: Bearer <access_token>' from localStorage.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-137",
+      "section": "Session - 401 Refresh & Retry",
+      "title": "Expired access token triggers a one-time refresh and retry",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Valid refresh_token; corrupt/expire the access_token.",
+      "steps": [
+        "Expire the access_token in localStorage",
+        "Trigger a patient request (e.g. reload /patients)"
+      ],
+      "test_data": "N/A",
+      "expected_result": "The 401 triggers POST /api/auth/refresh; on success the access_token is replaced and the original request is retried transparently and succeeds.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-138",
+      "section": "Session - Refresh Failure Redirect",
+      "title": "Failed refresh clears storage and redirects to /login",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Both access_token and refresh_token invalid/expired.",
+      "steps": [
+        "Invalidate both tokens",
+        "Trigger a patient request"
+      ],
+      "test_data": "N/A",
+      "expected_result": "After the failed refresh, access_token/refresh_token/user are removed from localStorage and the app hard-redirects to /login.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-139",
+      "section": "Session - Route Guard",
+      "title": "Unauthenticated access to patient routes redirects to login",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Logged out (no tokens).",
+      "steps": [
+        "Open /patients, then /patients/:id, then /patients/:id/edit directly"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Each route requires authentication; an unauthenticated user is redirected to /login and cannot view patient data.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-140",
+      "section": "Patients List - Long/Special Input",
+      "title": "Very long and special-character search strings are handled safely",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "Logged in.",
+      "steps": [
+        "Search with a 300-char string and with characters like <script>, %, ', \"",
+        "Submit"
+      ],
+      "test_data": "300 'A's; <script>alert(1)</script>; O'Brien",
+      "expected_result": "No XSS executes; the app returns 0 results or matching results without errors; the query is sent URL-encoded as q.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "PAT-141",
+      "section": "Registration - Long Text & Special Chars",
+      "title": "Registration handles very long names and special characters",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "Registration dialog open.",
+      "steps": [
+        "Enter a 200-char first name, a name with apostrophe (D'Souza) and accented chars",
+        "Fill required fields and create"
+      ],
+      "test_data": "First='D'Souza-Ramachandran...' (very long)",
+      "expected_result": "The name is accepted (auto-capitalised first letter); special characters are preserved; either created successfully or a clear backend validation error — no crash.",
+      "api_reference": "POST /api/patients"
+    },
+    {
+      "id": "PAT-142",
+      "section": "Registration - Country Locked",
+      "title": "Country field is locked to India",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Registration dialog; Address accordion expanded.",
+      "steps": [
+        "Attempt to edit the Country field"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Country is disabled and fixed to 'India'.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-143",
+      "section": "Patient Detail - Care Circle in AI Summary",
+      "title": "Care circle data feeds the AI summary Basic Patient Details",
+      "priority": "Low",
+      "type": "Data Integrity",
+      "preconditions": "Care circle saved (PAT-062).",
+      "steps": [
+        "Open the AI Patient Summary card and read 'Primary Caregiver' and 'Phone Number'"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Basic Patient Details shows the saved primary caregiver (name + relationship + phone) and falls back to caregiver/alternative phone when no direct phone exists.",
+      "api_reference": "N/A (saranam getPatientSummary)"
+    },
+    {
+      "id": "PAT-144",
+      "section": "Patient Detail - Back Navigation",
+      "title": "'Back to Patients' returns to the list",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Patient detail open.",
+      "steps": [
+        "Click 'Back to Patients'"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Navigates to /patients.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "PAT-145",
+      "section": "Registration - Vitals/Numeric Boundary (PPS Card)",
+      "title": "Cannot save a PPS without selecting a row in the universal card",
+      "priority": "Low",
+      "type": "Validation",
+      "preconditions": "Patient with no priority/PPS; PPS card dialog open.",
+      "steps": [
+        "Open Record PPS where no default applies, do not click a row, click Save PPS"
+      ],
+      "test_data": "N/A",
+      "expected_result": "Save is disabled / alerts 'Please select a PPS score'; no POST is sent.",
+      "api_reference": "POST /api/patients/:id/pps"
+    }
+  ]
+}

@@ -1,0 +1,2256 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Palliative Care HMIS Gap Analysis Report - CV Raman Health</title>
+    <style>
+        /* Print-optimized styles */
+        @page {
+            size: A4;
+            margin: 2cm 1.5cm;
+        }
+
+        @media print {
+            body {
+                font-size: 10pt;
+                line-height: 1.4;
+            }
+
+            h1 {
+                page-break-before: always;
+                font-size: 18pt;
+            }
+
+            h1:first-of-type {
+                page-break-before: avoid;
+            }
+
+            h2 {
+                page-break-after: avoid;
+                font-size: 14pt;
+            }
+
+            h3, h4 {
+                page-break-after: avoid;
+            }
+
+            table {
+                page-break-inside: avoid;
+                font-size: 9pt;
+            }
+
+            thead {
+                display: table-header-group;
+            }
+
+            tr {
+                page-break-inside: avoid;
+            }
+
+            .no-print {
+                display: none;
+            }
+
+            a {
+                text-decoration: none;
+                color: #000;
+            }
+        }
+
+        /* Screen styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 40px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #2c3e50;
+            font-size: 28px;
+            border-bottom: 4px solid #3498db;
+            padding-bottom: 12px;
+            margin: 40px 0 20px 0;
+        }
+
+        h1:first-of-type {
+            margin-top: 0;
+        }
+
+        h2 {
+            color: #34495e;
+            font-size: 22px;
+            border-bottom: 2px solid #95a5a6;
+            padding-bottom: 8px;
+            margin: 35px 0 15px 0;
+        }
+
+        h3 {
+            color: #2c3e50;
+            font-size: 18px;
+            margin: 25px 0 12px 0;
+            font-weight: 600;
+        }
+
+        h4 {
+            color: #555;
+            font-size: 14px;
+            margin: 20px 0 10px 0;
+            font-weight: 600;
+        }
+
+        p {
+            margin: 10px 0;
+            text-align: justify;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 10pt;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        thead {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+        }
+
+        th {
+            color: white;
+            padding: 12px 10px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 9pt;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 10px;
+            border: 1px solid #e0e0e0;
+            vertical-align: top;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        tr:hover {
+            background-color: #e8f4f8;
+        }
+
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', 'Monaco', monospace;
+            font-size: 10pt;
+            color: #c7254e;
+        }
+
+        pre {
+            background-color: #f4f4f4;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border-left: 4px solid #3498db;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            color: #333;
+        }
+
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 20px;
+            margin: 15px 0;
+            color: #555;
+            font-style: italic;
+            background-color: #f9f9f9;
+            padding: 15px 15px 15px 20px;
+            border-radius: 0 4px 4px 0;
+        }
+
+        ul, ol {
+            margin: 15px 0;
+            padding-left: 30px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        /* Status indicators */
+        td:contains("✅"), td:contains("Implemented") {
+            color: #27ae60;
+        }
+
+        td:contains("❌"), td:contains("Missing") {
+            color: #e74c3c;
+        }
+
+        td:contains("🔄"), td:contains("Adaptable") {
+            color: #f39c12;
+        }
+
+        hr {
+            border: none;
+            border-top: 2px solid #ddd;
+            margin: 30px 0;
+        }
+
+        /* Header styling */
+        .report-header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 4px double #3498db;
+        }
+
+        .report-header h1 {
+            border: none;
+            margin: 10px 0;
+            font-size: 32px;
+            color: #2c3e50;
+        }
+
+        .report-subtitle {
+            font-size: 16px;
+            color: #7f8c8d;
+            font-weight: normal;
+            margin: 10px 0;
+        }
+
+        .report-meta {
+            font-size: 12px;
+            color: #95a5a6;
+            margin-top: 15px;
+        }
+
+        /* Print button */
+        .no-print {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+
+        .no-print:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin: 0 5px;
+        }
+
+        .badge-critical {
+            background-color: #e74c3c;
+            color: white;
+        }
+
+        .badge-high {
+            background-color: #f39c12;
+            color: white;
+        }
+
+        .badge-medium {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .badge-low {
+            background-color: #95a5a6;
+            color: white;
+        }
+
+        /* Executive summary box */
+        .summary-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin: 30px 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .summary-box h3 {
+            color: white;
+            margin-top: 0;
+        }
+
+        /* Highlight boxes */
+        .highlight {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .success {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .danger {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .info {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <button class="no-print" onclick="window.print()">📄 Print / Save as PDF</button>
+
+    <div class="container">
+        <div class="report-header">
+            <h1>Palliative Care HMIS Gap Analysis Report</h1>
+            <p class="report-subtitle">CV Raman Health Product vs Palliative Care PRD Requirements</p>
+            <div class="report-meta">
+                <strong>Version:</strong> 1.0 |
+                <strong>Date:</strong> March 17, 2026 |
+                <strong>Prepared For:</strong> CV Raman Health Product Team
+            </div>
+        </div>
+
+        <h1 id="palliative-care-hmis-gap-analysis-report">Palliative Care HMIS Gap Analysis Report</h1>
+<p><strong>CV Raman Health Product vs Palliative Care PRD Requirements</strong></p>
+<p><strong>Date:</strong> March 17, 2026
+<strong>Version:</strong> 1.0
+<strong>Prepared For:</strong> CV Raman Health Product Team</p>
+<hr />
+<h2 id="executive-summary">Executive Summary</h2>
+<p>This document provides a comprehensive gap analysis between the current CV Raman Health product and the Palliative Care Health Records &amp; HMIS Product Requirements Document (PRD v1.0). The analysis identifies:</p>
+<ol>
+<li><strong>Features Already Implemented</strong> - Existing capabilities that meet PRD requirements</li>
+<li><strong>Features That Can Be Adapted</strong> - Existing features that need enhancement or modification</li>
+<li><strong>Missing Features</strong> - Completely new functionality required</li>
+</ol>
+<h3 id="key-findings-summary">Key Findings Summary</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Count</th>
+<th>Percentage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>✅ Already Implemented</td>
+<td>12 modules</td>
+<td>35%</td>
+</tr>
+<tr>
+<td>🔄 Can Be Adapted</td>
+<td>8 modules</td>
+<td>24%</td>
+</tr>
+<tr>
+<td>❌ Missing Completely</td>
+<td>14 modules</td>
+<td>41%</td>
+</tr>
+</tbody>
+</table>
+<h3 id="critical-gaps">Critical Gaps</h3>
+<ol>
+<li><strong>Medicine Inventory Management</strong> - Completely missing (entire module needed)</li>
+<li><strong>Deceased Patient Records</strong> - No workflow for end-of-life management</li>
+<li><strong>Vital Trends Dashboard</strong> - No graphical visualization with target lines</li>
+<li><strong>Route Optimization</strong> - No geolocation or traffic-aware scheduling</li>
+<li><strong>Mobile App for Field Staff</strong> - No offline-capable mobile application</li>
+</ol>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#1-health-records--vital-trends">Health Records &amp; Vital Trends</a></li>
+<li><a href="#2-medicine-inventory-management">Medicine Inventory Management</a></li>
+<li><a href="#3-patient-classification--tracking">Patient Classification &amp; Tracking</a></li>
+<li><a href="#4-end-of-life--deceased-records">End-of-Life &amp; Deceased Records</a></li>
+<li><a href="#5-home-care-intervention-scheduling">Home Care Intervention Scheduling</a></li>
+<li><a href="#6-user-interface--experience">User Interface &amp; Experience</a></li>
+<li><a href="#7-technical-architecture">Technical Architecture</a></li>
+<li><a href="#8-success-metrics--kpis">Success Metrics &amp; KPIs</a></li>
+<li><a href="#9-implementation-recommendations">Implementation Recommendations</a></li>
+<li><a href="#10-cost--effort-estimates">Cost &amp; Effort Estimates</a></li>
+</ol>
+<hr />
+<h2 id="1-health-records-vital-trends">1. Health Records &amp; Vital Trends</h2>
+<h3 id="prd-requirements">PRD Requirements</h3>
+<h4 id="patient-record-structure">Patient Record Structure</h4>
+<ul>
+<li>Demographics (name, DOB, gender, contact, emergency contact, caregiver details)</li>
+<li>Clinical Information (diagnoses, allergies, medications, procedures)</li>
+<li>Vital Signs (BP, HR, RR, temp, SpO2, weight, BMI, pain score, functional status)</li>
+</ul>
+<h4 id="vital-trends-dashboard">Vital Trends Dashboard</h4>
+<ul>
+<li>Multi-vital line graphs with overlay capability</li>
+<li>Time range filters (7, 14, 30, 90 days, custom)</li>
+<li>Selectable parameters (toggle vitals on/off)</li>
+<li>Target trend lines (horizontal reference lines)</li>
+<li>Threshold alerts (visual flagging)</li>
+<li>Annotation support (clinician notes)</li>
+<li>Export capability (PNG/PDF)</li>
+</ul>
+<h4 id="target-trend-line-configuration">Target Trend Line Configuration</h4>
+<ul>
+<li>Facility-wide or patient-specific target ranges</li>
+<li>Min/max thresholds per vital</li>
+<li>Color-coded alerts</li>
+</ul>
+<h3 id="current-product-status">Current Product Status</h3>
+<p>✅ <strong>Already Implemented:</strong>
+- Patient demographics with ABHA ID integration
+- Emergency contact and caregiver management (PatientCaregiver model)
+- Observation model supports all vital signs
+- IPD VitalsRecord for daily vitals tracking
+- Pain score and functional status support
+- Basic vital sign recording</p>
+<p>❌ <strong>Missing:</strong>
+- Vital trends dashboard with graphical visualization
+- Multi-vital overlay graphs
+- Target trend line configuration UI
+- Threshold alert system for vitals
+- Annotation capability on vital measurements
+- Export vitals as PNG/PDF
+- Time range filtering UI for vitals
+- Configurable clinical target ranges</p>
+<h3 id="gap-analysis">Gap Analysis</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+<th>Effort</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Vital trends visualization (graphs)</td>
+<td>❌ Missing</td>
+<td>High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Target trend lines configuration</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Multi-vital overlay capability</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Threshold alerts</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Annotation on vitals</td>
+<td>❌ Missing</td>
+<td>Low</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Export vitals as PNG/PDF</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
+<h3 id="recommendations">Recommendations</h3>
+<p><strong>🔄 Can Be Adapted:</strong>
+- Existing Observation and VitalsRecord models contain the raw data
+- Recharts library already in use for other analytics
+- Need to build new frontend components:
+  1. VitalTrendsChart component with Recharts
+  2. TargetLineConfiguration component
+  3. VitalsFilterPanel component
+  4. AnnotationEditor component
+- Backend: Add target_range field to Observation model
+- Backend: Add annotation field to VitalsRecord model</p>
+<p><strong>Development Estimate:</strong> 3-4 weeks</p>
+<hr />
+<h2 id="2-medicine-inventory-management">2. Medicine Inventory Management</h2>
+<h3 id="prd-requirements_1">PRD Requirements</h3>
+<h4 id="medicine-record-fields">Medicine Record Fields</h4>
+<ul>
+<li>Medicine name, generic name, brand name</li>
+<li>Strength/dosage, form (tablet, injection, liquid)</li>
+<li>Batch number and expiry date</li>
+<li>Current quantity, reorder quantity</li>
+<li>Storage location</li>
+<li>Supplier information, cost per unit</li>
+</ul>
+<h4 id="par-level-sub-par-level-system">Par Level &amp; Sub-Par Level System</h4>
+<ul>
+<li>Par Level: Maximum standard inventory quantity</li>
+<li>Sub-Par Level: Minimum threshold for reorder alerts</li>
+<li>Alert rules:</li>
+<li>Above Par: Green - Optimal</li>
+<li>At Par: Green - Ideal</li>
+<li>Between Par &amp; Sub-Par: Yellow - Caution (initiate purchase order)</li>
+<li>Below Sub-Par: Red - Critical (emergency reorder)</li>
+<li>Expired/Near Expiry (&lt;7 days): Red - Compliance alert</li>
+</ul>
+<h4 id="dashboard-reporting">Dashboard &amp; Reporting</h4>
+<ul>
+<li>Inventory Health Dashboard (color-coded)</li>
+<li>Critical Items Report</li>
+<li>Expiry Tracker</li>
+<li>Consumption Analytics</li>
+<li>Purchase Order Generation</li>
+</ul>
+<h3 id="current-product-status_1">Current Product Status</h3>
+<p>❌ <strong>Completely Missing:</strong>
+- No medicine/inventory module
+- No pharmacy management
+- No prescription tracking
+- No stock management system
+- No par/sub-par level configuration
+- No medicine expiry tracking
+- No inventory alerts
+- No purchase order system
+- No consumption analytics for medicines</p>
+<h3 id="gap-analysis_1">Gap Analysis</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+<th>Effort</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Medicine master data model</td>
+<td>❌ Missing</td>
+<td>High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Inventory tracking system</td>
+<td>❌ Missing</td>
+<td>High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Par/Sub-Par level configuration</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Stock alert system</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Expiry tracking</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Inventory dashboard</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Consumption analytics</td>
+<td>❌ Missing</td>
+<td>High</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Purchase order workflow</td>
+<td>❌ Missing</td>
+<td>High</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Supplier management</td>
+<td>❌ Missing</td>
+<td>Low</td>
+<td>Low</td>
+</tr>
+</tbody>
+</table>
+<h3 id="recommendations_1">Recommendations</h3>
+<p><strong>❌ Completely New Module Required:</strong></p>
+<p>This is a major gap requiring a complete new module. Suggested implementation approach:</p>
+<p><strong>Phase 1: Core Inventory (Critical)</strong>
+1. Create database models:
+   - Medicine (name, generic, brand, strength, form)
+   - InventoryItem (batch, expiry, quantity, location)
+   - StockLevel (par_level, sub_par_level, current_qty)
+   - StockAlert (alert_type, severity, status)
+2. Build inventory management UI
+3. Implement stock tracking APIs
+4. Create basic inventory dashboard</p>
+<p><strong>Phase 2: Alerts &amp; Monitoring (High Priority)</strong>
+1. Automated alert generation (par/sub-par triggers)
+2. Expiry tracking (7-day warning)
+3. Critical items report
+4. Email/SMS notifications</p>
+<p><strong>Phase 3: Analytics &amp; Optimization (Medium Priority)</strong>
+1. Consumption analytics
+2. Usage trend forecasting
+3. Purchase order suggestions
+4. Inventory optimization recommendations</p>
+<p><strong>Development Estimate:</strong> 8-12 weeks (full module)</p>
+<hr />
+<h2 id="3-patient-classification-tracking">3. Patient Classification &amp; Tracking</h2>
+<h3 id="prd-requirements_2">PRD Requirements</h3>
+<h4 id="patient-status-categories">Patient Status Categories</h4>
+<ol>
+<li>Inpatient (IP) - Admitted to hospital/hospice</li>
+<li>Outpatient (OP) - Clinic visits without admission</li>
+<li>Home Care - Palliative interventions at home</li>
+<li>Day Care/Respite - Temporary facility care</li>
+</ol>
+<h4 id="census-dashboard">Census Dashboard</h4>
+<ul>
+<li>Real-time census by category with sparkline trends</li>
+<li>Ward-level IP census with bed occupancy percentages</li>
+<li>Date range filtering for historical census</li>
+<li>Quick-access patient lists</li>
+<li>Patient status transition workflow with audit trail</li>
+</ul>
+<h3 id="current-product-status_2">Current Product Status</h3>
+<p>✅ <strong>Already Implemented:</strong>
+- Inpatient (IP) via IPDAdmission model
+- Outpatient (OP) via Encounter type=OPD
+- Home Care via Service type=HOME_CARE
+- Bed management with occupancy tracking
+- Encounter status transitions
+- Basic patient lists by type
+- IPDDashboard with bed statistics</p>
+<p>❌ <strong>Missing:</strong>
+- Day Care/Respite category
+- Dedicated census dashboard with sparklines
+- Real-time census metrics card
+- Historical census trend analysis
+- Ward-level census breakdown UI
+- Patient status transition audit view</p>
+<p>🔄 <strong>Can Be Adapted:</strong>
+- Existing data models support census calculation
+- Need UI components for census visualization
+- Add Day Care/Respite service type</p>
+<h3 id="gap-analysis_2">Gap Analysis</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+<th>Effort</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Day Care/Respite category</td>
+<td>❌ Missing</td>
+<td>Low</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Census dashboard UI</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Sparkline trends</td>
+<td>❌ Missing</td>
+<td>Low</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Ward-level census breakdown</td>
+<td>🔄 Adaptable</td>
+<td>Low</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Status transition audit view</td>
+<td>🔄 Adaptable</td>
+<td>Low</td>
+<td>Low</td>
+</tr>
+</tbody>
+</table>
+<h3 id="recommendations_2">Recommendations</h3>
+<p><strong>🔄 Can Be Adapted with Minor Changes:</strong>
+1. Add "DAY_CARE_RESPITE" to Service types
+2. Create CensusDashboard component with:
+   - Real-time census cards (IP, OP, Home Care, Day Care)
+   - Sparkline trend visualization (using Recharts)
+   - Ward-level breakdown (use existing Bed model data)
+3. Enhance existing IPDDashboard
+4. Add census API endpoint: <code>GET /api/census/summary</code></p>
+<p><strong>Development Estimate:</strong> 2-3 weeks</p>
+<hr />
+<h2 id="4-end-of-life-deceased-records">4. End-of-Life &amp; Deceased Records</h2>
+<h3 id="prd-requirements_3">PRD Requirements</h3>
+<h4 id="separate-deceased-patient-view">Separate Deceased Patient View</h4>
+<ul>
+<li>Dedicated interface for deceased patients</li>
+<li>Respectful record management</li>
+</ul>
+<h4 id="death-record-workflow">Death Record Workflow</h4>
+<ul>
+<li>Date and time of death</li>
+<li>Location of death (home, facility, hospital)</li>
+<li>Certifying physician and signature</li>
+<li>Probable cause(s) of death (immediate vs underlying)</li>
+<li>Funeral/burial arrangement details</li>
+<li>Organ donation consent</li>
+</ul>
+<h4 id="deceased-patient-dashboard">Deceased Patient Dashboard</h4>
+<ul>
+<li>View-only access to deceased records</li>
+<li>Filter by date range of death</li>
+<li>Search by patient name, ID, ward</li>
+<li>Death summary display</li>
+<li>Link to complete medical records</li>
+<li>Archival notes for quality assurance</li>
+</ul>
+<h4 id="data-security-privacy">Data Security &amp; Privacy</h4>
+<ul>
+<li>Secure encrypted storage</li>
+<li>Audit logging</li>
+<li>No modification of archived records</li>
+<li>Retention policy compliance</li>
+</ul>
+<h3 id="current-product-status_3">Current Product Status</h3>
+<p>❌ <strong>Completely Missing:</strong>
+- No deceased patient management
+- No death record workflow
+- No separate view for deceased patients
+- No death certificate generation
+- No archival system for deceased records
+- Patient status has no "deceased" category
+- No mortality review features
+- No bereavement documentation</p>
+<h3 id="gap-analysis_3">Gap Analysis</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+<th>Effort</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deceased patient status</td>
+<td>❌ Missing</td>
+<td>Low</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Death record model</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Death record workflow UI</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Deceased patient dashboard</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Death certificate generation</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Mortality review features</td>
+<td>❌ Missing</td>
+<td>Low</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Archival system</td>
+<td>❌ Missing</td>
+<td>High</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Bereavement documentation</td>
+<td>❌ Missing</td>
+<td>Low</td>
+<td>Low</td>
+</tr>
+</tbody>
+</table>
+<h3 id="recommendations_3">Recommendations</h3>
+<p><strong>❌ New Module Required:</strong></p>
+<p>This is a sensitive and critical gap for palliative care. Suggested implementation:</p>
+<p><strong>Phase 1: Core Death Records (Critical)</strong>
+1. Add database models:
+   - DeathRecord (date, time, location, certifying_physician)
+   - CauseOfDeath (immediate_cause, underlying_cause, ICD_code)
+   - DeceasedPatientArchive (archived_data, retention_date)
+2. Add "deceased" status to Patient model
+3. Create death record entry form
+4. Build deceased patient list view</p>
+<p><strong>Phase 2: Dashboard &amp; Workflow (High)</strong>
+1. Deceased patient dashboard with filters
+2. View-only access to archived records
+3. Death certificate generation (PDF)
+4. Mortality review interface</p>
+<p><strong>Phase 3: Compliance &amp; Archival (High)</strong>
+1. Automated archival workflow
+2. Retention policy configuration
+3. Enhanced audit logging
+4. Organ donation consent tracking</p>
+<p><strong>Development Estimate:</strong> 6-8 weeks</p>
+<hr />
+<h2 id="5-home-care-intervention-scheduling">5. Home Care Intervention Scheduling</h2>
+<h3 id="prd-requirements_4">PRD Requirements</h3>
+<h4 id="intervention-types">Intervention Types</h4>
+<ul>
+<li>Nursing assessment, vital sign monitoring</li>
+<li>Medication administration, injection/IV therapy</li>
+<li>Wound care, dressing changes</li>
+<li>Pain and symptom management</li>
+<li>Physical therapy, mobility assistance</li>
+<li>Psychological and spiritual support</li>
+<li>Caregiver education and counseling</li>
+</ul>
+<h4 id="scheduling-interface">Scheduling Interface</h4>
+<ul>
+<li>Select patient from home care census</li>
+<li>Define intervention type and objectives</li>
+<li>Set frequency (daily, weekly, etc.)</li>
+<li>Assign nurse/caregiver</li>
+</ul>
+<h4 id="route-optimization">Route Optimization</h4>
+<ul>
+<li>Integrated map view (Google Maps API / HERE Maps)</li>
+<li>Real-time traffic data</li>
+<li>Automatic route suggestion algorithm:</li>
+<li>Minimize travel time and distance</li>
+<li>Respect traffic patterns and time windows</li>
+<li>Prioritize urgent/critical patients</li>
+<li>Manual drag-and-drop route modification</li>
+<li>Estimated travel time between patients</li>
+</ul>
+<h4 id="traffic-aware-scheduling">Traffic-Aware Scheduling</h4>
+<ul>
+<li>Current and predicted traffic conditions</li>
+<li>Adjusted appointment times for travel duration</li>
+<li>Estimated arrival time (ETA) with buffer</li>
+<li>Alerts if round-trip exceeds shift length</li>
+<li>Alternative route suggestions</li>
+</ul>
+<h4 id="visit-management-mobile-app">Visit Management (Mobile App)</h4>
+<ul>
+<li>Offline capabilities</li>
+<li>Geolocation-based check-in/check-out</li>
+<li>Record vitals and assessments</li>
+<li>Document interventions</li>
+<li>Upload photos/media (wound images)</li>
+<li>Sync data when connectivity available</li>
+</ul>
+<h4 id="communication-coordination">Communication &amp; Coordination</h4>
+<ul>
+<li>In-app messaging</li>
+<li>SMS/push notifications for schedule changes</li>
+<li>Real-time location sharing</li>
+<li>Escalation protocol</li>
+</ul>
+<h3 id="current-product-status_4">Current Product Status</h3>
+<p>✅ <strong>Already Implemented:</strong>
+- HOME_CARE service type
+- Service booking workflow
+- Appointment scheduling system
+- Provider assignment
+- SMS reminders (AppointmentReminder model)
+- Patient geolocation storage (PatientLocation model)</p>
+<p>❌ <strong>Missing:</strong>
+- Route optimization engine
+- Maps integration (Google Maps/HERE Maps)
+- Real-time traffic data integration
+- Geolocation check-in/check-out
+- Mobile app for field staff
+- Offline capabilities
+- Travel time calculation
+- Drag-and-drop route planning UI
+- Map view with patient markers
+- In-app messaging system
+- Real-time location sharing
+- ETA calculation
+- Traffic-aware scheduling logic</p>
+<h3 id="gap-analysis_4">Gap Analysis</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+<th>Effort</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Google Maps integration</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Route optimization algorithm</td>
+<td>❌ Missing</td>
+<td>High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Traffic data integration</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Map view for scheduling</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Geolocation check-in/out</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Mobile app (offline)</td>
+<td>❌ Missing</td>
+<td>Very High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Travel time estimation</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Drag-and-drop route editor</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>In-app messaging</td>
+<td>❌ Missing</td>
+<td>High</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Real-time location tracking</td>
+<td>❌ Missing</td>
+<td>High</td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
+<h3 id="recommendations_4">Recommendations</h3>
+<p><strong>🔄 Can Be Adapted (Major Enhancements Required):</strong></p>
+<p>Existing home care scheduling exists but needs significant enhancements:</p>
+<p><strong>Phase 1: Maps &amp; Geolocation (Critical)</strong>
+1. Integrate Google Maps JavaScript API
+2. Create RouteOptimization model:
+   - route_id, date, nurse_id
+   - patient_sequence (ordered list)
+   - total_distance, total_time
+   - traffic_conditions
+3. Build MapSchedulerView component:
+   - Patient markers on map
+   - Route polylines
+   - Traffic layer overlay
+4. Add geolocation to appointments:
+   - check_in_location, check_in_time
+   - check_out_location, check_out_time
+5. API endpoint: <code>POST /api/routes/optimize</code></p>
+<p><strong>Phase 2: Route Optimization Engine (Critical)</strong>
+1. Integrate Google Maps Directions API
+2. Implement route optimization algorithm:
+   - TSP (Traveling Salesman Problem) solver
+   - Priority weighting (urgent patients first)
+   - Time window constraints
+   - Traffic data consideration
+3. Real-time traffic integration (Google Traffic API)
+4. Travel time estimation
+5. ETA calculation with buffer</p>
+<p><strong>Phase 3: Mobile App (Critical - Separate Project)</strong>
+1. React Native or Flutter mobile app
+2. Offline-first architecture (local SQLite)
+3. Geolocation tracking
+4. Check-in/check-out with GPS
+5. Vitals recording offline
+6. Photo capture (wound documentation)
+7. Data sync when online
+8. Push notifications</p>
+<p><strong>Phase 4: Communication (Medium)</strong>
+1. In-app messaging (WebSocket)
+2. Real-time location sharing
+3. Schedule change notifications
+4. Escalation alerts</p>
+<p><strong>Development Estimate:</strong>
+- Phase 1 &amp; 2: 6-8 weeks
+- Phase 3 (Mobile App): 12-16 weeks (separate project)
+- Phase 4: 4-6 weeks</p>
+<hr />
+<h2 id="6-user-interface-experience">6. User Interface &amp; Experience</h2>
+<h3 id="prd-requirements_5">PRD Requirements</h3>
+<h4 id="dashboard-layout">Dashboard Layout</h4>
+<ul>
+<li>Real-time census metrics (IP, OP, Home Care, Day Care)</li>
+<li>Critical alerts (medicines below sub-par, vital deviations)</li>
+<li>Home care scheduled visits (today/tomorrow)</li>
+<li>Recent admissions/discharges</li>
+<li>Medicine expiry alerts</li>
+<li>Stock status summary</li>
+</ul>
+<h4 id="key-page-structures">Key Page Structures</h4>
+<ul>
+<li><strong>Patient Record Page:</strong> Demographics header, tabs (Overview, Clinical History, Vital Trends, Medications, Care Plan, Notes)</li>
+<li><strong>Inventory Management Page:</strong> Filter/search, table with color-coded status</li>
+<li><strong>Census Dashboard:</strong> Summary cards, ward occupancy, patient lists</li>
+<li><strong>Home Care Scheduler:</strong> Calendar view, map view, route optimization</li>
+<li><strong>Deceased Patient Records:</strong> Separate view-only section</li>
+</ul>
+<h4 id="responsive-design">Responsive Design</h4>
+<ul>
+<li>Desktop: Full feature set</li>
+<li>Tablet: Ward rounds, point-of-care data entry</li>
+<li>Mobile: Field-focused with offline sync</li>
+</ul>
+<h4 id="accessibility">Accessibility</h4>
+<ul>
+<li>WCAG 2.1 AA compliance</li>
+<li>High contrast color schemes</li>
+<li>Keyboard navigation</li>
+<li>Screen reader compatibility</li>
+</ul>
+<h3 id="current-product-status_5">Current Product Status</h3>
+<p>✅ <strong>Already Implemented:</strong>
+- Dashboard with analytics overview
+- Patient detail page with rich information
+- Form-based data entry
+- Responsive design (desktop/tablet/mobile web)
+- IPD dashboard
+- Appointment calendar view
+- Analytics dashboards</p>
+<p>❌ <strong>Missing:</strong>
+- Medicine expiry alerts on dashboard (no inventory module)
+- Dedicated census dashboard
+- Home care scheduler with map view
+- Deceased patient view
+- Native mobile app
+- WCAG 2.1 AA compliance documentation
+- Accessibility testing</p>
+<p>🔄 <strong>Can Be Adapted:</strong>
+- Dashboard needs enhancements for palliative care
+- Patient page needs vital trends tab
+- Need new pages for inventory, census, deceased</p>
+<h3 id="gap-analysis_5">Gap Analysis</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+<th>Effort</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Enhanced dashboard for palliative care</td>
+<td>🔄 Adaptable</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Vital Trends tab on patient page</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Inventory Management page</td>
+<td>❌ Missing</td>
+<td>High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Census Dashboard page</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Home Care Map Scheduler</td>
+<td>❌ Missing</td>
+<td>High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Deceased Patient Records page</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Native mobile app</td>
+<td>❌ Missing</td>
+<td>Very High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>WCAG 2.1 AA compliance</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
+<h3 id="recommendations_5">Recommendations</h3>
+<p><strong>🔄 Dashboard Enhancements:</strong>
+1. Add census summary cards to main dashboard
+2. Add medicine expiry alerts section (post inventory module)
+3. Add today's home care visits widget
+4. Add critical patient alerts (vitals deviations)</p>
+<p><strong>❌ New Pages Required:</strong>
+1. VitalTrendsDashboard - Graphical vital trends
+2. InventoryManagement - Medicine stock management
+3. CensusDashboard - Patient census by category
+4. HomeCareMAPScheduler - Map-based route planning
+5. DeceasedPatientRecords - Respectful deceased patient management</p>
+<p><strong>Development Estimate:</strong>
+- Dashboard enhancements: 1-2 weeks
+- New pages: 8-10 weeks (combined)
+- Mobile app: 12-16 weeks (separate)
+- Accessibility audit &amp; fixes: 3-4 weeks</p>
+<hr />
+<h2 id="7-technical-architecture">7. Technical Architecture</h2>
+<h3 id="prd-requirements_6">PRD Requirements</h3>
+<h4 id="third-party-integrations">Third-Party Integrations</h4>
+<ul>
+<li>Maps: Google Maps API or HERE Maps</li>
+<li>Traffic: Real-time traffic data API</li>
+<li>Analytics: Chart.js, D3.js, Recharts</li>
+<li>SMS/Notifications: Firebase Cloud Messaging, Twilio</li>
+<li>File Storage: AWS S3</li>
+</ul>
+<h4 id="data-security-compliance">Data Security &amp; Compliance</h4>
+<ul>
+<li>Encryption: TLS 1.2+, AES-256</li>
+<li>Authentication: Multi-factor authentication (MFA), RBAC</li>
+<li>Audit Logging: All access/modifications logged</li>
+<li>HIPAA Compliance</li>
+<li>GDPR Compliance</li>
+<li>Backup: Automated daily backups</li>
+<li>Disaster Recovery: RTO ≤ 4 hours, RPO ≤ 1 hour</li>
+</ul>
+<h4 id="system-performance">System Performance</h4>
+<ul>
+<li>Page Load Time: &lt;2 seconds</li>
+<li>API Response Time: &lt;500ms (95th percentile)</li>
+<li>Uptime: 99.5% SLA</li>
+<li>Concurrent Users: 500+</li>
+</ul>
+<h3 id="current-product-status_6">Current Product Status</h3>
+<p>✅ <strong>Already Implemented:</strong>
+- Recharts for analytics
+- PostgreSQL on Supabase (with backups)
+- TLS encryption (via Supabase)
+- AES-256 equivalent (Fernet encryption for sensitive data)
+- RBAC (admin, data_entry, viewer)
+- Audit logging (ConsentAccessLog, AuditLog)
+- DPDPA 2023 compliance (India's GDPR equivalent)
+- JWT authentication</p>
+<p>❌ <strong>Missing:</strong>
+- Google Maps API integration
+- Traffic data API integration
+- Multi-factor authentication (MFA)
+- SMS integration (Twilio)
+- File storage (AWS S3 or equivalent)
+- HIPAA compliance documentation
+- GDPR compliance documentation
+- Performance monitoring
+- Uptime SLA monitoring
+- Disaster recovery plan documentation</p>
+<p>🔄 <strong>Can Be Adapted:</strong>
+- Firebase Cloud Messaging can be added
+- Twilio integration needed for SMS reminders
+- MFA can be added to existing auth system</p>
+<h3 id="gap-analysis_6">Gap Analysis</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+<th>Effort</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Google Maps API</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Traffic Data API</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Twilio SMS integration</td>
+<td>❌ Missing</td>
+<td>Low</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Firebase Cloud Messaging</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>AWS S3 file storage</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Multi-factor authentication</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>HIPAA compliance audit</td>
+<td>❌ Missing</td>
+<td>High</td>
+<td>High</td>
+</tr>
+<tr>
+<td>GDPR compliance audit</td>
+<td>❌ Missing</td>
+<td>High</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Performance monitoring</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Disaster recovery plan</td>
+<td>❌ Missing</td>
+<td>Low</td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
+<h3 id="recommendations_6">Recommendations</h3>
+<p><strong>Phase 1: Critical Integrations</strong>
+1. Google Maps JavaScript API + Directions API
+2. Google Traffic API
+3. Twilio for SMS (enhance AppointmentReminder)
+4. MFA implementation (TOTP-based)</p>
+<p><strong>Phase 2: Infrastructure</strong>
+1. AWS S3 for file storage (wound photos, documents)
+2. Firebase Cloud Messaging for mobile push
+3. Performance monitoring (New Relic or Datadog)
+4. Uptime monitoring (Pingdom or UptimeRobot)</p>
+<p><strong>Phase 3: Compliance</strong>
+1. HIPAA compliance audit and documentation
+2. GDPR/DPDPA compliance review
+3. Disaster recovery procedures
+4. Backup restoration testing</p>
+<p><strong>Development Estimate:</strong>
+- Phase 1: 4-6 weeks
+- Phase 2: 4-6 weeks
+- Phase 3: 6-8 weeks (ongoing)</p>
+<hr />
+<h2 id="8-success-metrics-kpis">8. Success Metrics &amp; KPIs</h2>
+<h3 id="prd-requirements_7">PRD Requirements</h3>
+<h4 id="clinical-outcomes">Clinical Outcomes</h4>
+<ul>
+<li>Reduction in medication errors: Target 50%</li>
+<li>Vital monitoring compliance: Target 95%</li>
+<li>Adverse event reporting: 100% within 24h</li>
+<li>Pain control: ≥80% patients with pain score ≤3</li>
+<li>Unplanned readmissions: &lt;15% within 30 days</li>
+<li>Patient/caregiver satisfaction: ≥85%</li>
+</ul>
+<h4 id="operational-efficiency">Operational Efficiency</h4>
+<ul>
+<li>Stock-out incidents: &lt;5% annually</li>
+<li>Medicine wastage: &lt;3% due to expiry</li>
+<li>Inventory accuracy: ≥98%</li>
+<li>Schedule adherence: ≥95% of planned visits</li>
+<li>Average travel time reduction: 20% vs baseline</li>
+<li>Visit duration compliance: 90% within planned duration</li>
+<li>Data entry time reduction: 40%</li>
+<li>System availability: 99.5% uptime</li>
+<li>User adoption: 90% active monthly users within 6 months</li>
+</ul>
+<h4 id="user-satisfaction">User Satisfaction</h4>
+<ul>
+<li>Staff satisfaction: ≥4/5</li>
+<li>Net Promoter Score: &gt;40</li>
+<li>System Usability Score (SUS): ≥75/100</li>
+<li>Support ticket resolution: 85% within 24h</li>
+</ul>
+<h3 id="current-product-status_7">Current Product Status</h3>
+<p>✅ <strong>Already Implemented:</strong>
+- Analytics module with dashboards
+- Symptom tracking
+- Risk assessment tracking
+- Form submission analytics
+- User activity tracking</p>
+<p>❌ <strong>Missing:</strong>
+- Medication error tracking (no inventory module)
+- Vital monitoring compliance metrics
+- Adverse event reporting workflow
+- Pain control dashboards
+- Readmission tracking
+- Patient satisfaction surveys
+- Inventory metrics (no inventory module)
+- Schedule adherence tracking
+- Travel time metrics
+- Visit duration tracking
+- Data entry time metrics
+- System uptime dashboard
+- User adoption tracking dashboard
+- Support ticket system
+- NPS/SUS scoring</p>
+<h3 id="gap-analysis_7">Gap Analysis</h3>
+<table>
+<thead>
+<tr>
+<th>Metric Category</th>
+<th>Status</th>
+<th>Effort</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Clinical outcome tracking</td>
+<td>🔄 Partially implemented</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Medication error metrics</td>
+<td>❌ Missing (needs inventory)</td>
+<td>High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Vital compliance tracking</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Adverse event workflow</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Pain control dashboards</td>
+<td>❌ Missing</td>
+<td>Low</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Readmission analytics</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Patient satisfaction surveys</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Inventory KPIs</td>
+<td>❌ Missing (needs inventory)</td>
+<td>High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Schedule adherence</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Travel time analytics</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>System performance metrics</td>
+<td>❌ Missing</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>User adoption tracking</td>
+<td>❌ Missing</td>
+<td>Low</td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
+<h3 id="recommendations_7">Recommendations</h3>
+<p><strong>Phase 1: Clinical KPI Dashboard</strong>
+1. Create KPIDashboard component
+2. Add vital monitoring compliance calculator
+3. Build adverse event reporting form
+4. Create pain control trend analysis
+5. Add readmission tracking</p>
+<p><strong>Phase 2: Operational KPI Dashboard</strong>
+1. Schedule adherence calculator
+2. Travel time analytics (post route optimization)
+3. Visit duration tracking
+4. Data entry time measurement
+5. System performance monitoring</p>
+<p><strong>Phase 3: User Satisfaction</strong>
+1. Patient satisfaction survey module
+2. NPS scoring system
+3. SUS assessment tool
+4. Support ticket integration (Zendesk/Freshdesk)</p>
+<p><strong>Development Estimate:</strong> 6-8 weeks</p>
+<hr />
+<h2 id="9-implementation-recommendations">9. Implementation Recommendations</h2>
+<h3 id="phased-implementation-roadmap">Phased Implementation Roadmap</h3>
+<h4 id="phase-1-foundation-critical-gaps-12-16-weeks">Phase 1: Foundation &amp; Critical Gaps (12-16 weeks)</h4>
+<p><strong>Priority: CRITICAL</strong></p>
+<ol>
+<li><strong>Medicine Inventory Module</strong> (8-12 weeks)</li>
+<li>Medicine master data</li>
+<li>Inventory tracking</li>
+<li>Par/Sub-Par level system</li>
+<li>Stock alerts</li>
+<li>
+<p>Basic inventory dashboard</p>
+</li>
+<li>
+<p><strong>Vital Trends Dashboard</strong> (3-4 weeks)</p>
+</li>
+<li>Graphical vital trends</li>
+<li>Target trend lines</li>
+<li>Multi-vital overlay</li>
+<li>
+<p>Threshold alerts</p>
+</li>
+<li>
+<p><strong>Deceased Patient Records</strong> (6-8 weeks)</p>
+</li>
+<li>Death record workflow</li>
+<li>Deceased patient dashboard</li>
+<li>Archival system</li>
+</ol>
+<p><strong>Total Effort:</strong> 17-24 weeks (parallel development possible)</p>
+<h4 id="phase-2-enhanced-workflows-14-18-weeks">Phase 2: Enhanced Workflows (14-18 weeks)</h4>
+<p><strong>Priority: HIGH</strong></p>
+<ol>
+<li><strong>Home Care Route Optimization</strong> (6-8 weeks)</li>
+<li>Google Maps integration</li>
+<li>Route optimization engine</li>
+<li>Traffic data integration</li>
+<li>
+<p>Map-based scheduler</p>
+</li>
+<li>
+<p><strong>Census Dashboard</strong> (2-3 weeks)</p>
+</li>
+<li>Real-time census metrics</li>
+<li>Sparkline trends</li>
+<li>
+<p>Ward-level breakdown</p>
+</li>
+<li>
+<p><strong>Clinical KPI Dashboard</strong> (4-6 weeks)</p>
+</li>
+<li>Vital compliance tracking</li>
+<li>Adverse event reporting</li>
+<li>Pain control analytics</li>
+<li>
+<p>Readmission tracking</p>
+</li>
+<li>
+<p><strong>Patient Satisfaction Surveys</strong> (2-3 weeks)</p>
+</li>
+<li>Survey form builder</li>
+<li>NPS/SUS scoring</li>
+<li>Satisfaction analytics</li>
+</ol>
+<p><strong>Total Effort:</strong> 14-20 weeks</p>
+<h4 id="phase-3-mobile-advanced-features-16-24-weeks">Phase 3: Mobile &amp; Advanced Features (16-24 weeks)</h4>
+<p><strong>Priority: MEDIUM-HIGH</strong></p>
+<ol>
+<li><strong>Mobile App for Field Staff</strong> (12-16 weeks)</li>
+<li>React Native/Flutter app</li>
+<li>Offline capabilities</li>
+<li>Geolocation check-in/out</li>
+<li>Vitals recording</li>
+<li>Photo capture</li>
+<li>
+<p>Data sync</p>
+</li>
+<li>
+<p><strong>In-App Messaging</strong> (4-6 weeks)</p>
+</li>
+<li>WebSocket messaging</li>
+<li>Real-time notifications</li>
+<li>
+<p>Provider-nurse communication</p>
+</li>
+<li>
+<p><strong>Advanced Analytics</strong> (4-6 weeks)</p>
+</li>
+<li>Consumption analytics</li>
+<li>Forecasting</li>
+<li>Operational metrics</li>
+<li>Performance dashboards</li>
+</ol>
+<p><strong>Total Effort:</strong> 20-28 weeks</p>
+<h4 id="phase-4-compliance-optimization-8-12-weeks">Phase 4: Compliance &amp; Optimization (8-12 weeks)</h4>
+<p><strong>Priority: MEDIUM</strong></p>
+<ol>
+<li><strong>HIPAA Compliance Audit</strong> (4-6 weeks)</li>
+<li>Documentation</li>
+<li>Security hardening</li>
+<li>
+<p>Audit trail enhancements</p>
+</li>
+<li>
+<p><strong>WCAG 2.1 AA Accessibility</strong> (3-4 weeks)</p>
+</li>
+<li>Accessibility audit</li>
+<li>Remediation</li>
+<li>
+<p>Testing</p>
+</li>
+<li>
+<p><strong>Performance Optimization</strong> (3-4 weeks)</p>
+</li>
+<li>Monitoring setup</li>
+<li>Query optimization</li>
+<li>Caching layer</li>
+</ol>
+<p><strong>Total Effort:</strong> 10-14 weeks</p>
+<h3 id="total-implementation-timeline">Total Implementation Timeline</h3>
+<ul>
+<li><strong>Minimum:</strong> 59 weeks (14-15 months)</li>
+<li><strong>Maximum:</strong> 86 weeks (20-21 months)</li>
+<li><strong>Recommended (with parallel teams):</strong> 12-15 months</li>
+</ul>
+<hr />
+<h2 id="10-cost-effort-estimates">10. Cost &amp; Effort Estimates</h2>
+<h3 id="development-effort-summary">Development Effort Summary</h3>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Effort (Weeks)</th>
+<th>Team Size</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Medicine Inventory</td>
+<td>8-12</td>
+<td>2-3 devs</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Vital Trends Dashboard</td>
+<td>3-4</td>
+<td>1-2 devs</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Deceased Patient Records</td>
+<td>6-8</td>
+<td>2 devs</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Route Optimization</td>
+<td>6-8</td>
+<td>2-3 devs</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Census Dashboard</td>
+<td>2-3</td>
+<td>1 dev</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Clinical KPI Dashboard</td>
+<td>4-6</td>
+<td>1-2 devs</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Mobile App</td>
+<td>12-16</td>
+<td>3-4 devs</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>In-App Messaging</td>
+<td>4-6</td>
+<td>2 devs</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Compliance &amp; Accessibility</td>
+<td>10-14</td>
+<td>2 devs</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td><strong>TOTAL</strong></td>
+<td><strong>55-77 weeks</strong></td>
+<td><strong>Variable</strong></td>
+<td><strong>Mixed</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="third-party-service-costs-annual-estimates">Third-Party Service Costs (Annual Estimates)</h3>
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th>Purpose</th>
+<th>Estimated Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Google Maps API</td>
+<td>Route optimization, maps</td>
+<td>$5,000 - $15,000</td>
+</tr>
+<tr>
+<td>Twilio SMS</td>
+<td>Appointment reminders</td>
+<td>$2,000 - $5,000</td>
+</tr>
+<tr>
+<td>Firebase</td>
+<td>Push notifications</td>
+<td>$1,000 - $3,000</td>
+</tr>
+<tr>
+<td>AWS S3</td>
+<td>File storage</td>
+<td>$500 - $2,000</td>
+</tr>
+<tr>
+<td>Monitoring (Datadog/New Relic)</td>
+<td>Performance monitoring</td>
+<td>$3,000 - $8,000</td>
+</tr>
+<tr>
+<td><strong>TOTAL ANNUAL</strong></td>
+<td></td>
+<td><strong>$11,500 - $33,000</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="resource-requirements">Resource Requirements</h3>
+<p><strong>Development Team:</strong>
+- 2-3 Backend Developers (Python/Flask)
+- 2-3 Frontend Developers (React)
+- 2-3 Mobile Developers (React Native/Flutter)
+- 1 DevOps Engineer
+- 1 QA Engineer
+- 1 UX/UI Designer
+- 1 Product Manager
+- 1 Healthcare Domain Expert</p>
+<p><strong>Estimated Total Cost Range:</strong>
+- <strong>Minimum (lean team, sequential):</strong> $250,000 - $350,000
+- <strong>Optimal (full team, parallel):</strong> $400,000 - $600,000
+- <strong>Maximum (comprehensive):</strong> $700,000 - $900,000</p>
+<hr />
+<h2 id="11-risk-assessment">11. Risk Assessment</h2>
+<h3 id="high-risk-items">High-Risk Items</h3>
+<ol>
+<li><strong>Medicine Inventory Module (Critical)</strong></li>
+<li><strong>Risk:</strong> Complex module with compliance implications</li>
+<li>
+<p><strong>Mitigation:</strong> Engage pharmacy domain expert, phased rollout</p>
+</li>
+<li>
+<p><strong>Mobile App Development (Critical)</strong></p>
+</li>
+<li><strong>Risk:</strong> Offline sync complexity, platform-specific issues</li>
+<li>
+<p><strong>Mitigation:</strong> Use proven framework (React Native), extensive testing</p>
+</li>
+<li>
+<p><strong>Route Optimization Algorithm (High)</strong></p>
+</li>
+<li><strong>Risk:</strong> Complex optimization logic, traffic data accuracy</li>
+<li>
+<p><strong>Mitigation:</strong> Use Google Maps APIs, incremental improvements</p>
+</li>
+<li>
+<p><strong>HIPAA Compliance (High)</strong></p>
+</li>
+<li><strong>Risk:</strong> Regulatory requirements, potential penalties</li>
+<li><strong>Mitigation:</strong> Compliance audit early, legal review</li>
+</ol>
+<h3 id="medium-risk-items">Medium-Risk Items</h3>
+<ol>
+<li><strong>Data Migration for Deceased Records</strong></li>
+<li><strong>Third-Party API Reliability (Maps, Traffic)</strong></li>
+<li><strong>User Adoption of New Features</strong></li>
+<li><strong>Performance at Scale (500+ concurrent users)</strong></li>
+</ol>
+<hr />
+<h2 id="12-conclusion-next-steps">12. Conclusion &amp; Next Steps</h2>
+<h3 id="summary-of-gaps">Summary of Gaps</h3>
+<p><strong>Critical Gaps (Must Have for Palliative Care HMIS):</strong>
+1. Medicine Inventory Management (completely missing)
+2. Deceased Patient Records (completely missing)
+3. Vital Trends Dashboard with graphs (missing)
+4. Route Optimization for home care (missing)
+5. Mobile app for field staff (missing)</p>
+<p><strong>High-Priority Gaps (Important for Full Functionality):</strong>
+1. Census dashboard
+2. Clinical KPI tracking
+3. Adverse event reporting
+4. Patient satisfaction surveys
+5. HIPAA compliance</p>
+<p><strong>Medium-Priority Gaps (Nice to Have):</strong>
+1. In-app messaging
+2. Advanced analytics
+3. WCAG 2.1 AA accessibility
+4. Performance monitoring</p>
+<h3 id="strengths-of-current-product">Strengths of Current Product</h3>
+<p>Your CV Raman Health product has excellent foundations:
+- ✅ Robust patient management with ABHA compliance
+- ✅ Flexible form system with AI builder
+- ✅ Strong IPD management with bed tracking
+- ✅ Comprehensive appointment scheduling
+- ✅ Good analytics framework
+- ✅ DPDPA 2023 compliance
+- ✅ Cohort management
+- ✅ Provider scheduling</p>
+<h3 id="recommended-next-steps">Recommended Next Steps</h3>
+<ol>
+<li><strong>Immediate (Next 3 Months):</strong></li>
+<li>Develop medicine inventory module (Phase 1)</li>
+<li>Build vital trends dashboard</li>
+<li>
+<p>Start Google Maps integration</p>
+</li>
+<li>
+<p><strong>Short-Term (3-6 Months):</strong></p>
+</li>
+<li>Complete deceased patient records</li>
+<li>Implement route optimization</li>
+<li>Build census dashboard</li>
+<li>
+<p>Develop clinical KPI dashboard</p>
+</li>
+<li>
+<p><strong>Medium-Term (6-12 Months):</strong></p>
+</li>
+<li>Launch mobile app development</li>
+<li>Add in-app messaging</li>
+<li>Conduct HIPAA compliance audit</li>
+<li>
+<p>Implement advanced analytics</p>
+</li>
+<li>
+<p><strong>Long-Term (12+ Months):</strong></p>
+</li>
+<li>Continuous optimization</li>
+<li>Accessibility improvements</li>
+<li>User feedback integration</li>
+<li>Scale and performance tuning</li>
+</ol>
+<h3 id="final-recommendation">Final Recommendation</h3>
+<p><strong>Option 1: Full Palliative Care HMIS (15-18 months)</strong>
+- Implement all critical and high-priority features
+- Comprehensive compliance audit
+- Mobile app development
+- Estimated cost: $500,000 - $700,000</p>
+<p><strong>Option 2: Core Palliative Care Extension (8-10 months)</strong>
+- Focus on critical gaps only (inventory, deceased, vital trends, route optimization)
+- Web-only (no mobile app initially)
+- Basic compliance
+- Estimated cost: $300,000 - $400,000</p>
+<p><strong>Option 3: Incremental Enhancement (Ongoing)</strong>
+- Prioritize features based on user feedback
+- Gradual rollout over 18-24 months
+- Lower upfront cost, longer timeline
+- Estimated cost: $400,000 - $600,000</p>
+<hr />
+<h2 id="appendix-a-feature-by-feature-comparison-matrix">Appendix A: Feature-by-Feature Comparison Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>PRD Feature</th>
+<th>Current Status</th>
+<th>Can Adapt?</th>
+<th>Effort</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Patient demographics</td>
+<td>✅ Implemented</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+</tr>
+<tr>
+<td>ABHA ID integration</td>
+<td>✅ Implemented</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+</tr>
+<tr>
+<td>Vital signs recording</td>
+<td>✅ Implemented</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+</tr>
+<tr>
+<td>Vital trends graphs</td>
+<td>❌ Missing</td>
+<td>🔄 Yes</td>
+<td>Medium</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Target trend lines</td>
+<td>❌ Missing</td>
+<td>🔄 Yes</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Medicine inventory</td>
+<td>❌ Missing</td>
+<td>❌ No</td>
+<td>High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Par/Sub-Par levels</td>
+<td>❌ Missing</td>
+<td>❌ No</td>
+<td>Medium</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Stock alerts</td>
+<td>❌ Missing</td>
+<td>❌ No</td>
+<td>Medium</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Expiry tracking</td>
+<td>❌ Missing</td>
+<td>❌ No</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>IP/OP classification</td>
+<td>✅ Implemented</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+</tr>
+<tr>
+<td>Home Care service</td>
+<td>✅ Implemented</td>
+<td>🔄 Yes</td>
+<td>Low</td>
+<td>N/A</td>
+</tr>
+<tr>
+<td>Day Care/Respite</td>
+<td>❌ Missing</td>
+<td>🔄 Yes</td>
+<td>Low</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Census dashboard</td>
+<td>❌ Missing</td>
+<td>🔄 Yes</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Deceased patient records</td>
+<td>❌ Missing</td>
+<td>❌ No</td>
+<td>High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Death record workflow</td>
+<td>❌ Missing</td>
+<td>❌ No</td>
+<td>Medium</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Route optimization</td>
+<td>❌ Missing</td>
+<td>🔄 Partial</td>
+<td>High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Google Maps integration</td>
+<td>❌ Missing</td>
+<td>❌ No</td>
+<td>Medium</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Traffic data</td>
+<td>❌ Missing</td>
+<td>❌ No</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Geolocation check-in</td>
+<td>❌ Missing</td>
+<td>🔄 Yes</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Mobile app</td>
+<td>❌ Missing</td>
+<td>❌ No</td>
+<td>Very High</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>In-app messaging</td>
+<td>❌ Missing</td>
+<td>❌ No</td>
+<td>High</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>MFA authentication</td>
+<td>❌ Missing</td>
+<td>🔄 Yes</td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td>HIPAA compliance</td>
+<td>❌ Missing</td>
+<td>🔄 Partial</td>
+<td>High</td>
+<td>High</td>
+</tr>
+<tr>
+<td>WCAG 2.1 AA</td>
+<td>❌ Missing</td>
+<td>🔄 Yes</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Legend:</strong>
+- ✅ Implemented: Feature exists and meets requirements
+- ❌ Missing: Feature does not exist
+- 🔄 Can Adapt: Existing infrastructure can be modified
+- N/A: Not applicable</p>
+<hr />
+<h2 id="appendix-b-api-endpoints-gap-analysis">Appendix B: API Endpoints Gap Analysis</h2>
+<h3 id="required-prd-endpoints-vs-current-product">Required PRD Endpoints vs Current Product</h3>
+<table>
+<thead>
+<tr>
+<th>PRD Requirement</th>
+<th>Current Endpoint</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET /api/vitals/trends</td>
+<td>None</td>
+<td>❌ Missing</td>
+</tr>
+<tr>
+<td>POST /api/vitals/target-ranges</td>
+<td>None</td>
+<td>❌ Missing</td>
+</tr>
+<tr>
+<td>GET /api/inventory/medicines</td>
+<td>None</td>
+<td>❌ Missing</td>
+</tr>
+<tr>
+<td>POST /api/inventory/stock-alert</td>
+<td>None</td>
+<td>❌ Missing</td>
+</tr>
+<tr>
+<td>GET /api/inventory/expiry-tracker</td>
+<td>None</td>
+<td>❌ Missing</td>
+</tr>
+<tr>
+<td>GET /api/census/summary</td>
+<td>None</td>
+<td>❌ Missing</td>
+</tr>
+<tr>
+<td>GET /api/census/ward-breakdown</td>
+<td>GET /api/ipd/dashboard (partial)</td>
+<td>🔄 Adaptable</td>
+</tr>
+<tr>
+<td>POST /api/deceased/death-record</td>
+<td>None</td>
+<td>❌ Missing</td>
+</tr>
+<tr>
+<td>GET /api/deceased/patients</td>
+<td>None</td>
+<td>❌ Missing</td>
+</tr>
+<tr>
+<td>POST /api/routes/optimize</td>
+<td>None</td>
+<td>❌ Missing</td>
+</tr>
+<tr>
+<td>GET /api/routes/traffic</td>
+<td>None</td>
+<td>❌ Missing</td>
+</tr>
+<tr>
+<td>POST /api/visits/check-in</td>
+<td>None</td>
+<td>❌ Missing</td>
+</tr>
+<tr>
+<td>GET /api/kpi/clinical</td>
+<td>None</td>
+<td>❌ Missing</td>
+</tr>
+<tr>
+<td>GET /api/kpi/operational</td>
+<td>None</td>
+<td>❌ Missing</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="appendix-c-database-schema-changes-required">Appendix C: Database Schema Changes Required</h2>
+<h3 id="new-tables-needed">New Tables Needed</h3>
+<ol>
+<li><strong>Medicine</strong> - Medicine master data</li>
+<li><strong>InventoryItem</strong> - Batch-level inventory tracking</li>
+<li><strong>StockLevel</strong> - Par/Sub-Par configuration</li>
+<li><strong>StockAlert</strong> - Inventory alerts</li>
+<li><strong>StockMovement</strong> - Inventory transactions</li>
+<li><strong>DeathRecord</strong> - Death information</li>
+<li><strong>CauseOfDeath</strong> - Death causes</li>
+<li><strong>DeceasedPatientArchive</strong> - Archived records</li>
+<li><strong>VitalTargetRange</strong> - Target trend lines</li>
+<li><strong>VitalAnnotation</strong> - Clinician notes on vitals</li>
+<li><strong>Route</strong> - Optimized route plans</li>
+<li><strong>RouteWaypoint</strong> - Route patient sequence</li>
+<li><strong>VisitCheckIn</strong> - Geolocation check-in/out</li>
+<li><strong>ClinicalKPI</strong> - KPI tracking</li>
+<li><strong>PatientSatisfactionSurvey</strong> - Satisfaction surveys</li>
+</ol>
+<h3 id="modifications-to-existing-tables">Modifications to Existing Tables</h3>
+<ol>
+<li><strong>Patient</strong> - Add deceased_status, date_of_death</li>
+<li><strong>Service</strong> - Add DAY_CARE_RESPITE type</li>
+<li><strong>Appointment</strong> - Add check_in_location, check_out_location, actual_travel_time</li>
+<li><strong>Observation</strong> - Add target_min, target_max, annotation</li>
+<li><strong>VitalsRecord</strong> - Add is_critical, alert_triggered</li>
+</ol>
+<hr />
+<h2 id="appendix-d-technology-stack-additions">Appendix D: Technology Stack Additions</h2>
+<h3 id="required-third-party-librariesservices">Required Third-Party Libraries/Services</h3>
+<p><strong>Backend:</strong>
+- google-maps-services-python (Google Maps API)
+- python-tsp (route optimization)
+- celery + redis (background jobs for route calculation)
+- reportlab (PDF generation for death certificates)
+- pyotp (MFA/TOTP)</p>
+<p><strong>Frontend:</strong>
+- @react-google-maps/api (Google Maps React)
+- react-beautiful-dnd (drag-and-drop route editor)
+- recharts (already in use, expand usage)
+- jspdf (client-side PDF export)
+- socket.io-client (in-app messaging)</p>
+<p><strong>Mobile:</strong>
+- React Native or Flutter
+- react-native-maps (Google Maps)
+- react-native-geolocation
+- realm or watermelondb (offline storage)
+- react-native-camera (photo capture)</p>
+<p><strong>Infrastructure:</strong>
+- AWS S3 or Cloudinary (file storage)
+- Twilio (SMS)
+- Firebase Cloud Messaging (push notifications)
+- Redis (caching, background jobs)
+- Datadog or New Relic (monitoring)</p>
+<hr />
+<p><strong>End of Gap Analysis Report</strong></p>
+<p><strong>Prepared by:</strong> Claude Code
+<strong>Date:</strong> March 17, 2026
+<strong>Version:</strong> 1.0</p>
+
+        <hr>
+        <footer style="text-align: center; color: #95a5a6; font-size: 10pt; margin-top: 40px;">
+            <p><strong>End of Gap Analysis Report</strong></p>
+            <p>Prepared by Claude Code | Date: March 17, 2026 | Version: 1.0</p>
+            <p style="margin-top: 10px; font-size: 9pt;">© 2026 CV Raman Health - Confidential and Proprietary</p>
+        </footer>
+    </div>
+
+    <script>
+        // Enhance tables with tooltips and interactions
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add hover effects
+            const tables = document.querySelectorAll('table');
+            tables.forEach(table => {
+                table.style.cursor = 'default';
+            });
+
+            // Add status colors
+            const cells = document.querySelectorAll('td, th');
+            cells.forEach(cell => {
+                const text = cell.textContent.trim();
+                if (text.includes('✅') || text.toLowerCase().includes('implemented')) {
+                    cell.style.color = '#27ae60';
+                    cell.style.fontWeight = 'bold';
+                }
+                if (text.includes('❌') || text.toLowerCase().includes('missing')) {
+                    cell.style.color = '#e74c3c';
+                    cell.style.fontWeight = 'bold';
+                }
+                if (text.includes('🔄') || text.toLowerCase().includes('adaptable')) {
+                    cell.style.color = '#f39c12';
+                    cell.style.fontWeight = 'bold';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

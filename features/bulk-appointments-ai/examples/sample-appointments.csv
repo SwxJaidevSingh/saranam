@@ -1,0 +1,16 @@
+Patient Name,Phone,Email,Date of Birth,Gender,Provider,Department,Date,Time,Type,Duration,Chief Complaint,Notes
+Rajesh Kumar,9876543210,rajesh.kumar@email.com,1985-03-15,Male,Dr. Priya Sharma,Cardiology,2026-03-15,09:00,consultation,30,Chest pain and shortness of breath,Patient reports symptoms for 2 days
+Anita Singh,9876543211,anita.singh@email.com,1990-07-22,Female,Dr. Amit Patel,General Medicine,2026-03-15,10:00,consultation,30,Fever and body ache,Follow-up from last week
+Mohammed Ali,9876543212,mohammed.ali@email.com,1978-11-30,Male,Dr. Priya Sharma,Cardiology,2026-03-15,11:00,follow_up,30,Blood pressure check,Regular follow-up
+Sunita Devi,9876543213,sunita.devi@email.com,1965-05-10,Female,Dr. Rajesh Verma,Orthopedics,2026-03-16,09:00,consultation,45,Knee pain,Pain in right knee for 3 months
+Vikram Rao,9876543214,vikram.rao@email.com,1992-09-18,Male,Dr. Amit Patel,General Medicine,2026-03-16,10:00,consultation,30,Regular checkup,Annual health checkup
+Priya Reddy,9876543215,priya.reddy@email.com,1988-12-25,Female,Dr. Neha Gupta,Gynecology,2026-03-16,14:00,consultation,30,Pregnancy checkup,2nd trimester checkup
+Arjun Malhotra,9876543216,arjun.malhotra@email.com,1975-04-08,Male,Dr. Priya Sharma,Cardiology,2026-03-17,09:00,follow_up,30,Post-surgery checkup,Follow-up after angioplasty
+Lakshmi Iyer,9876543217,lakshmi.iyer@email.com,1995-08-14,Female,Dr. Rajesh Verma,Orthopedics,2026-03-17,11:00,consultation,30,Back pain,Lower back pain for 1 month
+Sanjay Desai,9876543218,sanjay.desai@email.com,1982-06-20,Male,Dr. Amit Patel,General Medicine,2026-03-17,15:00,consultation,30,Diabetes management,Blood sugar control issues
+Kavita Nair,9876543219,kavita.nair@email.com,1970-10-05,Female,Dr. Neha Gupta,Gynecology,2026-03-18,09:00,consultation,30,Menopause symptoms,Hot flashes and mood changes
+Rahul Joshi,9876543220,rahul.joshi@email.com,1998-02-28,Male,Dr. Rajesh Verma,Orthopedics,2026-03-18,10:00,consultation,45,Sports injury,Ankle sprain from football
+Meera Shah,9876543221,meera.shah@email.com,1987-01-12,Female,Dr. Priya Sharma,Cardiology,2026-03-18,14:00,consultation,30,Irregular heartbeat,Palpitations for 2 weeks
+Anil Kapoor,9876543222,anil.kapoor@email.com,1955-07-30,Male,Dr. Amit Patel,General Medicine,2026-03-19,09:00,follow_up,30,Hypertension review,Monthly BP monitoring
+Deepa Menon,9876543223,deepa.menon@email.com,1993-11-17,Female,Dr. Neha Gupta,Gynecology,2026-03-19,11:00,consultation,30,Contraception counseling,Family planning discussion
+Karthik Krishnan,9876543224,karthik.krishnan@email.com,1980-03-25,Male,Dr. Rajesh Verma,Orthopedics,2026-03-19,15:00,consultation,30,Shoulder pain,Rotator cuff issue

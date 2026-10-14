@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CV Raman Health - Sarana Mindia Presentation</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .slide {
+            width: 1920px;
+            height: 1080px;
+            background: white;
+            margin: 50px auto;
+            padding: 80px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            box-sizing: border-box;
+            page-break-after: always;
+            position: relative;
+            overflow: hidden;
+        }
+        .slide::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 10px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        }
+        h1 {
+            color: #2c3e50;
+            font-size: 48px;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 20px;
+        }
+        h2 {
+            color: #667eea;
+            font-size: 36px;
+            margin-top: 40px;
+            margin-bottom: 20px;
+        }
+        h3 {
+            color: #34495e;
+            font-size: 28px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            margin-top: 40px;
+        }
+        .feature-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .feature-box h4 {
+            color: #667eea;
+            font-size: 22px;
+            margin-bottom: 10px;
+        }
+        .feature-box ul {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-box li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+        .feature-box li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .workflow-container {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 40px;
+            margin: 30px 0;
+        }
+        .workflow-step {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 5px solid #667eea;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .workflow-step::after {
+            content: "▼";
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #667eea;
+            font-size: 20px;
+        }
+        .workflow-step:last-child::after {
+            display: none;
+        }
+        .workflow-step h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            margin-top: 40px;
+        }
+        .benefit-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border-top: 4px solid #667eea;
+        }
+        .benefit-card h4 {
+            color: #667eea;
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+        .benefit-card .metric {
+            font-size: 32px;
+            font-weight: bold;
+            color: #27ae60;
+            display: block;
+            margin: 10px 0;
+        }
+        .metrics-row {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 40px;
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 12px;
+        }
+        .metric-item {
+            text-align: center;
+        }
+        .metric-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .metric-label {
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+        .footer-logos {
+            position: absolute;
+            bottom: 40px;
+            right: 80px;
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }
+        .logo-placeholder {
+            width: 150px;
+            height: 60px;
+            background: #ecf0f1;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #95a5a6;
+            font-size: 14px;
+        }
+        @media print {
+            body {
+                background: white;
+            }
+            .slide {
+                margin: 0;
+                box-shadow: none;
+                page-break-after: always;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- SLIDE 1: Overview and Core Capabilities -->
+    <div class="slide">
+        <h1>CV RAMAN HEALTH</h1>
+        <h2>Comprehensive Healthcare Management Platform</h2>
+        <p style="font-size: 24px; color: #7f8c8d; font-style: italic;">Empowering Healthcare Organizations with Digital Excellence</p>
+
+        <div class="features-grid">
+            <div class="feature-box">
+                <h4>🏥 Patient Management</h4>
+                <ul>
+                    <li>ABHA Integration (Ayushman Bharat)</li>
+                    <li>Secure encrypted data storage</li>
+                    <li>Multi-source health data integration</li>
+                    <li>Comprehensive medical records</li>
+                </ul>
+            </div>
+
+            <div class="feature-box">
+                <h4>📋 Dynamic Data Collection</h4>
+                <ul>
+                    <li>Custom form builder interface</li>
+                    <li>Multiple field types & validation</li>
+                    <li>Mobile-responsive design</li>
+                    <li>Offline capability with sync</li>
+                </ul>
+            </div>
+
+            <div class="feature-box">
+                <h4>🏠 Service Management</h4>
+                <ul>
+                    <li>Home care service tracking</li>
+                    <li>OPD & IPD management</li>
+                    <li>Health camp organization</li>
+                    <li>Provider scheduling & tracking</li>
+                </ul>
+            </div>
+
+            <div class="feature-box">
+                <h4>📊 Analytics & Insights</h4>
+                <ul>
+                    <li>Real-time health dashboards</li>
+                    <li>AI-powered risk assessment</li>
+                    <li>Geospatial health mapping</li>
+                    <li>Clinical outcome tracking</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="metrics-row">
+            <div class="metric-item">
+                <div class="metric-icon">👥</div>
+                <div class="metric-value">50,000+</div>
+                <div class="metric-label">Patients Supported</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon">🏥</div>
+                <div class="metric-value">200+</div>
+                <div class="metric-label">Healthcare Centers</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon">📱</div>
+                <div class="metric-value">100%</div>
+                <div class="metric-label">Mobile Compatible</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-icon">🔒</div>
+                <div class="metric-value">DPDPA</div>
+                <div class="metric-label">2023 Compliant</div>
+            </div>
+        </div>
+
+        <div class="footer-logos">
+            <div class="logo-placeholder">CV RAMAN HEALTH</div>
+            <div class="logo-placeholder">SARANA MINDIA</div>
+        </div>
+    </div>
+
+    <!-- SLIDE 2: Tailored Workflow -->
+    <div class="slide">
+        <h1>YOUR HEALTHCARE JOURNEY - DIGITALLY TRANSFORMED</h1>
+        <h2>Customized Workflow for Sarana Mindia</h2>
+
+        <div class="workflow-container">
+            <div class="workflow-step">
+                <h4>1️⃣ Patient Registration</h4>
+                <p>• Quick ABHA-based registration • Biometric authentication • DPDPA 2023 consent management</p>
+            </div>
+
+            <div class="workflow-step">
+                <h4>2️⃣ Health Screening</h4>
+                <p>• Custom screening forms • Multi-language support • Offline collection with GPS tagging</p>
+            </div>
+
+            <div class="workflow-step">
+                <h4>3️⃣ Clinical Data Management</h4>
+                <p>• Automated data extraction • Risk stratification • Follow-up scheduling • Referral management</p>
+            </div>
+
+            <div class="workflow-step">
+                <h4>4️⃣ Service Delivery</h4>
+                <p>• Home visit scheduling • Provider tracking • Quality monitoring • Feedback collection</p>
+            </div>
+
+            <div class="workflow-step">
+                <h4>5️⃣ Analytics & Reporting</h4>
+                <p>• Community health dashboards • Disease mapping • Impact reports • Multi-format exports</p>
+            </div>
+        </div>
+
+        <div class="benefits-grid">
+            <div class="benefit-card">
+                <h4>Operational Excellence</h4>
+                <span class="metric">70%</span>
+                <p>Reduction in data entry time with automated workflows and real-time visibility</p>
+            </div>
+
+            <div class="benefit-card">
+                <h4>Community Impact</h4>
+                <span class="metric">3X</span>
+                <p>Increase in patient reach through efficient resource allocation and mobile access</p>
+            </div>
+
+            <div class="benefit-card">
+                <h4>Compliance Ready</h4>
+                <span class="metric">100%</span>
+                <p>ABDM compliant with built-in DPDPA 2023 consent management</p>
+            </div>
+
+            <div class="benefit-card">
+                <h4>Cost Effective</h4>
+                <span class="metric">50%</span>
+                <p>Lower operational costs through paperless processes and cloud infrastructure</p>
+            </div>
+        </div>
+
+        <div class="footer-logos">
+            <div class="logo-placeholder">CV RAMAN HEALTH</div>
+            <div class="logo-placeholder">SARANA MINDIA</div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,176 @@
+{
+  "cancers_by_body_location": {
+    "AIDS-Related": [
+      "AIDS-Related Lymphoma",
+      "Primary Central Nervous System Lymphoma",
+      "Kaposi Sarcoma"
+    ],
+    "Breast": [
+      "Breast Cancer",
+      "Breast Cancer, Childhood",
+      "Breast Cancer and Pregnancy",
+      "Male Breast Cancer"
+    ],
+    "Digestive/Gastrointestinal": [
+      "Anal Cancer",
+      "Appendix Cancer",
+      "Bile Duct Cancer",
+      "Colon Cancer",
+      "Esophageal Cancer",
+      "Gallbladder Cancer",
+      "Gastric Cancer",
+      "Gastrointestinal Stromal Tumors (GIST)",
+      "Islet Cell Tumors, Pancreatic Neuroendocrine Tumors",
+      "Liver Cancer, Adult Primary",
+      "Liver Cancer, Childhood",
+      "Neuroendocrine Tumor, Gastrointestinal",
+      "Pancreatic Cancer",
+      "Rectal Cancer",
+      "Small Intestine Cancer",
+      "Stomach (Gastric) Cancer"
+    ],
+    "Dual Malignancy": [
+      "Synchronous Dual Primary Cancers",
+      "Metachronous Dual Primary Cancers",
+      "Multiple Primary Malignancies (MPM)"
+    ],
+    "Endocrine and Neuroendocrine": [
+      "Adrenocortical Carcinoma",
+      "Islet Cell Tumors, Pancreatic Neuroendocrine Tumors",
+      "Neuroendocrine Carcinoma of the Skin (Merkel Cell Carcinoma)",
+      "Neuroendocrine Tumor, Gastrointestinal",
+      "Parathyroid Cancer",
+      "Paraganglioma",
+      "Pheochromocytoma",
+      "Pituitary Tumor",
+      "Thyroid Cancer"
+    ],
+    "Eye": [
+      "Melanoma, Intraocular",
+      "Retinoblastoma"
+    ],
+    "Genitourinary": [
+      "Bladder Cancer",
+      "Kidney (Renal Cell) Cancer",
+      "Penile Cancer",
+      "Prostate Cancer",
+      "Renal Pelvis and Ureter Cancer, Transitional Cell",
+      "Testicular Cancer",
+      "Urethral Cancer",
+      "Wilms Tumor and Other Childhood Kidney Tumors"
+    ],
+    "Germ Cell": [
+      "Central Nervous System, Childhood",
+      "Extracranial Germ Cell Tumor, Childhood",
+      "Extragonadal Germ Cell Tumor",
+      "Ovarian Germ Cell Tumor",
+      "Testicular Cancer"
+    ],
+    "Gynecologic": [
+      "Cervical Cancer",
+      "Endometrial Cancer",
+      "Fallopian Tube Cancer",
+      "Gestational Trophoblastic Tumor",
+      "Ovarian Epithelial Cancer",
+      "Ovarian Germ Cell Tumor",
+      "Ovarian Low Malignant Potential Tumor",
+      "Primary Peritoneal Cancer",
+      "Uterine Sarcoma",
+      "Vaginal Cancer",
+      "Vulvar Cancer"
+    ],
+    "Head and Neck": [
+      "Hypopharyngeal Cancer",
+      "Laryngeal Cancer",
+      "Lip and Oral Cavity Cancer",
+      "Metastatic Squamous Neck Cancer with Occult Primary",
+      "Mouth Cancer",
+      "Nasopharyngeal Cancer",
+      "Oral Cavity Cancer, Lip and Oropharyngeal Cancer",
+      "Paranasal Sinus and Nasal Cavity Cancer",
+      "Parathyroid Cancer",
+      "Pharyngeal Cancer",
+      "Salivary Gland Cancer",
+      "Throat Cancer",
+      "Thyroid Cancer"
+    ],
+    "Hematologic/Blood": {
+      "Leukemia": [
+        "Acute Lymphoblastic Leukemia, Adult",
+        "Acute Lymphoblastic Leukemia, Childhood",
+        "Acute Myeloid Leukemia, Adult",
+        "Acute Myeloid Leukemia, Childhood",
+        "Chronic Lymphocytic Leukemia",
+        "Chronic Myelogenous Leukemia",
+        "Hairy Cell Leukemia"
+      ],
+      "Lymphoma": [
+        "AIDS-Related Lymphoma",
+        "Cutaneous T-Cell Lymphoma",
+        "Hodgkin Lymphoma, Adult",
+        "Hodgkin Lymphoma, Childhood",
+        "Hodgkin Lymphoma During Pregnancy",
+        "Mycosis Fungoides",
+        "Non-Hodgkin Lymphoma, Adult",
+        "Non-Hodgkin Lymphoma, Childhood",
+        "Non-Hodgkin Lymphoma During Pregnancy",
+        "Primary Central Nervous System Lymphoma",
+        "Sézary Syndrome",
+        "Waldenström Macroglobulinemia"
+      ],
+      "Other Hematologic/Blood Cancers": [
+        "Chronic Myeloproliferative Neoplasms",
+        "Langerhans Cell Histiocytosis",
+        "Multiple Myeloma/Plasma Cell Neoplasm",
+        "Myelodysplastic Syndromes",
+        "Myelodysplastic/Myeloproliferative Neoplasms"
+      ]
+    },
+    "Musculoskeletal": {
+      "Bone Cancer": [
+        "Ewing Sarcoma",
+        "Osteosarcoma and Undifferentiated Pleomorphic Sarcoma of Bone",
+        "Chordoma"
+      ],
+      "Other Musculoskeletal": [
+        "Rhabdomyosarcoma, Childhood",
+        "Soft Tissue Sarcoma"
+      ]
+    },
+    "Neurologic": {
+      "Brain Tumor": [
+        "Astrocytomas",
+        "Brain Stem Glioma",
+        "Central Nervous System Atypical Teratoid/Rhabdoid Tumor",
+        "Medulloblastoma and Other Central Nervous System Embryonal Tumors",
+        "Central Nervous System Germ Cell Tumors",
+        "Craniopharyngioma",
+        "Ependymoma"
+      ],
+      "Other Neurologic": [
+        "Neuroblastoma",
+        "Pituitary Tumor",
+        "Primary Central Nervous System (CNS) Lymphoma"
+      ]
+    },
+    "Respiratory/Thoracic": [
+      "Lung Cancer, Non-Small Cell",
+      "Lung Cancer, Small Cell",
+      "Pleuropulmonary Blastoma, Childhood",
+      "Tracheobronchial Tumors, Childhood",
+      "Mesothelioma",
+      "Thymus Cancer (Thymoma and Thymic Carcinoma)"
+    ],
+    "Skin": [
+      "Cutaneous T-Cell Lymphoma",
+      "Kaposi Sarcoma",
+      "Melanoma",
+      "Merkel Cell Carcinoma",
+      "Skin Cancer",
+      "Sézary Syndrome"
+    ],
+    "Unknown Primary": [
+      "Carcinoma of Unknown Primary"
+    ]
+  }
+}

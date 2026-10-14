@@ -1,0 +1,347 @@
+/* Appointment Calendar Custom Styles */
+
+/* CSS Variables for theming */
+:root {
+  /* Calendar Colors */
+  --calendar-bg: #ffffff;
+  --calendar-border: #e5e7eb;
+  --calendar-text: #1f2937;
+  --calendar-text-light: #6b7280;
+  --calendar-text-muted: #9ca3af;
+  --calendar-header-bg: #f9fafb;
+  --calendar-header-text: #374151;
+  --calendar-cell-bg: #f3f4f6;
+  --calendar-gutter-bg: #fafafa;
+  --calendar-today-bg: #eff6ff;
+  --calendar-today-text: #2563eb;
+  --calendar-selected-ring: rgba(59, 130, 246, 0.5);
+  --calendar-off-range-bg: #fafafa;
+  --calendar-hover-bg: rgba(59, 130, 246, 0.1);
+  --calendar-hover-bg-strong: rgba(59, 130, 246, 0.2);
+  --calendar-time-indicator: #ef4444;
+  --calendar-shadow: rgba(0, 0, 0, 0.1);
+}
+
+.dark {
+  /* Dark Mode Calendar */
+  --calendar-bg: hsl(var(--card));
+  --calendar-border: hsl(var(--border));
+  --calendar-text: hsl(var(--foreground));
+  --calendar-text-light: hsl(var(--muted-foreground));
+  --calendar-text-muted: hsl(var(--muted-foreground) / 0.7);
+  --calendar-header-bg: hsl(var(--secondary));
+  --calendar-header-text: hsl(var(--foreground));
+  --calendar-cell-bg: hsl(var(--secondary));
+  --calendar-gutter-bg: hsl(var(--background));
+  --calendar-today-bg: hsl(var(--accent));
+  --calendar-today-text: hsl(var(--primary));
+  --calendar-selected-ring: hsl(var(--primary) / 0.5);
+  --calendar-off-range-bg: hsl(var(--background));
+  --calendar-hover-bg: hsl(var(--accent));
+  --calendar-hover-bg-strong: hsl(var(--accent) / 0.8);
+  --calendar-time-indicator: #f87171;
+  --calendar-shadow: rgba(0, 0, 0, 0.3);
+}
+
+.appointment-calendar {
+  font-family: inherit;
+}
+
+/* Calendar container */
+.appointment-calendar .rbc-calendar {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px 0 var(--calendar-shadow);
+  background-color: var(--calendar-bg);
+}
+
+/* Toolbar styling */
+.appointment-calendar .rbc-toolbar {
+  padding: 16px;
+  background-color: var(--calendar-header-bg);
+  border-bottom: 1px solid var(--calendar-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.appointment-calendar .rbc-toolbar-label {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--calendar-text);
+  flex: 1;
+  text-align: center;
+  min-width: 200px;
+}
+
+.appointment-calendar .rbc-btn-group {
+  display: flex;
+  gap: 4px;
+}
+
+/* Header cells */
+.appointment-calendar .rbc-header {
+  padding: 12px 4px;
+  font-weight: 600;
+  color: var(--calendar-header-text);
+  background-color: var(--calendar-cell-bg);
+  border-bottom: 2px solid var(--calendar-border);
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+/* Time slots */
+.appointment-calendar .rbc-time-slot {
+  min-height: 40px;
+  border-top: 1px solid var(--calendar-border);
+}
+
+.appointment-calendar .rbc-time-gutter {
+  background-color: var(--calendar-gutter-bg);
+  font-size: 0.75rem;
+  color: var(--calendar-text-light);
+}
+
+.appointment-calendar .rbc-time-header-gutter {
+  background-color: var(--calendar-cell-bg);
+}
+
+/* Day cells in month view */
+.appointment-calendar .rbc-date-cell {
+  padding: 4px 8px;
+  text-align: right;
+  font-size: 0.875rem;
+  color: var(--calendar-text);
+}
+
+.appointment-calendar .rbc-off-range {
+  color: var(--calendar-text-muted);
+}
+
+.appointment-calendar .rbc-off-range-bg {
+  background-color: var(--calendar-off-range-bg);
+}
+
+.appointment-calendar .rbc-today {
+  background-color: var(--calendar-today-bg);
+}
+
+.appointment-calendar .rbc-now .rbc-button-link {
+  color: var(--calendar-today-text);
+  font-weight: 600;
+}
+
+/* Events */
+.appointment-calendar .rbc-event {
+  border-radius: 4px;
+  padding: 2px 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.appointment-calendar .rbc-event:hover {
+  opacity: 1 !important;
+  box-shadow: 0 4px 6px -1px var(--calendar-shadow);
+  transform: translateY(-1px);
+}
+
+.appointment-calendar .rbc-event-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.appointment-calendar .rbc-event-content {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Selected event */
+.appointment-calendar .rbc-event.rbc-selected {
+  box-shadow: 0 0 0 3px var(--calendar-selected-ring);
+}
+
+/* Week and day views */
+.appointment-calendar .rbc-time-content {
+  border-top: 1px solid var(--calendar-border);
+}
+
+.appointment-calendar .rbc-day-slot {
+  border-left: 1px solid var(--calendar-border);
+}
+
+.appointment-calendar .rbc-day-slot:first-child {
+  border-left: none;
+}
+
+.appointment-calendar .rbc-timeslot-group {
+  border-left: 1px solid var(--calendar-border);
+}
+
+/* Current time indicator */
+.appointment-calendar .rbc-current-time-indicator {
+  background-color: var(--calendar-time-indicator);
+  height: 2px;
+}
+
+/* Month view event display */
+.appointment-calendar .rbc-month-view .rbc-event {
+  padding: 2px 4px;
+  font-size: 0.7rem;
+  margin: 1px 2px;
+  border: none;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+/* Month view day cells - give more height */
+.appointment-calendar .rbc-month-view .rbc-day-bg {
+  min-height: 120px;
+  border: 1px solid var(--calendar-border);
+}
+
+.appointment-calendar .rbc-month-row {
+  min-height: 120px;
+  border-bottom: 1px solid var(--calendar-border);
+}
+
+.appointment-calendar .rbc-row-segment {
+  padding: 0 1px;
+}
+
+/* Show more link in month view */
+.appointment-calendar .rbc-month-view .rbc-show-more {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  margin-top: 2px;
+  background-color: var(--calendar-hover-bg);
+  color: var(--calendar-today-text);
+}
+
+/* Event content wrapper in month view */
+.appointment-calendar .rbc-month-view .rbc-event-content {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+/* Agenda view */
+.appointment-calendar .rbc-agenda-view {
+  padding: 16px;
+  background-color: var(--calendar-bg);
+}
+
+.appointment-calendar .rbc-agenda-table {
+  border: 1px solid var(--calendar-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.appointment-calendar .rbc-agenda-date-cell,
+.appointment-calendar .rbc-agenda-time-cell,
+.appointment-calendar .rbc-agenda-event-cell {
+  padding: 12px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--calendar-border);
+  background-color: var(--calendar-bg);
+}
+
+.appointment-calendar .rbc-agenda-date-cell {
+  font-weight: 600;
+  color: var(--calendar-text);
+  width: 120px;
+}
+
+.appointment-calendar .rbc-agenda-time-cell {
+  color: var(--calendar-text-light);
+  font-size: 0.875rem;
+  width: 150px;
+}
+
+.appointment-calendar .rbc-agenda-event-cell {
+  color: var(--calendar-text);
+}
+
+/* Empty states */
+.appointment-calendar .rbc-show-more {
+  background-color: var(--calendar-hover-bg);
+  color: var(--calendar-today-text);
+  font-size: 0.75rem;
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  margin: 2px;
+}
+
+.appointment-calendar .rbc-show-more:hover {
+  background-color: var(--calendar-hover-bg-strong);
+}
+
+/* Drag and drop */
+.appointment-calendar .rbc-addons-dnd-resizable {
+  position: relative;
+}
+
+.appointment-calendar .rbc-addons-dnd-resize-handle {
+  position: absolute;
+  width: 100%;
+  height: 10px;
+  bottom: 0;
+  cursor: ns-resize;
+  z-index: 1;
+}
+
+.appointment-calendar .rbc-addons-dnd-dragging {
+  opacity: 0.7;
+  cursor: move;
+}
+
+.appointment-calendar .rbc-addons-dnd-drag-preview {
+  opacity: 0.8;
+  box-shadow: 0 10px 15px -3px var(--calendar-shadow);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .appointment-calendar .rbc-toolbar {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .appointment-calendar .rbc-toolbar-label {
+    width: 100%;
+    text-align: center;
+    order: -1;
+  }
+
+  .appointment-calendar .rbc-event {
+    font-size: 0.75rem;
+    padding: 1px 3px;
+  }
+
+  .appointment-calendar .rbc-header {
+    font-size: 0.75rem;
+    padding: 8px 2px;
+  }
+}
+
+/* Print styles */
+@media print {
+  .appointment-calendar .rbc-toolbar {
+    display: none;
+  }
+
+  .appointment-calendar .rbc-event {
+    page-break-inside: avoid;
+  }
+}

@@ -1,0 +1,574 @@
+{
+  "module": "Settings",
+  "module_code": "SET",
+  "version": "1.0",
+  "summary": "Manual GO-LIVE test pack for the Saranam India Health Care Settings module (route /settings). IMPORTANT IMPLEMENTATION FACT: the Settings page is a purely client-side Appearance & Preferences screen driven entirely by ThemeContext and persisted to browser localStorage under the key 'themeConfig'. It contains exactly five sections — Appearance (Dark Mode toggle + current-theme info), Typography (font family: Inter / System Default / Open Sans), Border Radius (none/small/medium/large), Density (compact/comfortable/spacious) and Accessibility (Reduce Motion toggle + High Contrast toggle). The page makes NO network/API calls of its own, has NO profile-edit form, NO change-password form, NO notification preferences, NO organization/system settings and NO logout button. This pack therefore covers: page load & rendering of all five sections, every toggle/button, persistence across reload and navigation, app-wide application of each preference, accessibility/keyboard behaviour, localStorage data-integrity & corruption handling, system-theme detection, and the route guard / 401-session behaviour that protects /settings. Profile, password-change, notification, organization-settings and logout cases are documented as Out of Scope (NOT IMPLEMENTED) so the test team knows they are intentionally absent rather than missed.",
+  "in_scope": [
+    "Page load: /settings renders header (title 'Settings' + subtitle) and all five preference Cards (Appearance, Typography, Border Radius, Density, Accessibility) without errors",
+    "Appearance section: Dark Mode Switch toggle (on=dark / off=light), live theme application app-wide (document.documentElement 'dark' class), icon/label text changes (Moon/Sun, 'Dark theme is enabled' / 'Light theme is enabled'), 'Current theme' read-out, system-preference note shown only when no preference stored",
+    "Typography section: three font option buttons (Inter, System Default, Open Sans), selected-state highlight (primary border), live font-family application to document root, Google Fonts stylesheet injection for Inter / Open Sans",
+    "Border Radius section: four buttons (none/small/medium/large), selected-state highlight, live data-border-radius attribute + preview swatch radius",
+    "Density section: three buttons (compact/comfortable/spacious), selected-state highlight, live data-density attribute",
+    "Accessibility section: Reduce Motion Switch (adds/removes 'reduce-motion' class), High Contrast Switch (adds/removes 'high-contrast' class)",
+    "Persistence: all preferences saved to localStorage 'themeConfig' immediately on change and restored on reload, on navigation away and back, and in a new tab of same browser profile",
+    "Data integrity: a single 'themeConfig' JSON object holds all six keys (theme, font, borderRadius, density, reducedMotion, highContrast); changing one preference must not reset the others; corrupted JSON falls back to defaults",
+    "System theme detection: default theme follows OS prefers-color-scheme on a fresh profile; once a preference is stored, OS theme changes no longer auto-switch",
+    "App-wide effect verification: dark mode / font / radius / density applied to other screens (Dashboard, Patients), proving these are global document-level styles not page-local",
+    "Accessibility / keyboard: labels are associated with switches (htmlFor), switches & option buttons are keyboard-focusable and operable (Tab/Space/Enter)",
+    "Route guard & session: /settings requires an authenticated session (any role, permission=null); unauthenticated access redirects to /login; expired-token 401 triggers refresh-and-retry then /login on refresh failure"
+  ],
+  "out_of_scope": [
+    "Profile view/edit (name, email, phone, +91) — NOT IMPLEMENTED on the Settings page; there is no profile form or save button in Settings.jsx",
+    "Change Password (current/new/confirm) — NOT IMPLEMENTED; no password fields and no change-password endpoint exists in backend/app/auth/routes.py",
+    "Notification preferences — NOT IMPLEMENTED on the Settings page",
+    "Organization / system settings — NOT IMPLEMENTED on the Settings page",
+    "Logout from Settings — NOT IMPLEMENTED on the Settings page (logout lives in the layout/header, covered by the Auth module)",
+    "Server-side persistence of preferences — preferences are localStorage-only; they are NOT saved to the backend and are NOT synced across devices/browsers (verifying this absence is in scope as data-integrity notes, but building/altering server sync is out of scope)",
+    "Saranam Scheduling Settings page (/saranam/scheduling/settings) and IPD Form Configuration — separate modules, not the /settings appearance page",
+    "Pixel-perfect visual design / exact colour values of themes (only that the theme visibly changes is in scope)",
+    "Auth login screen internals (covered by the Auth/Users module; only redirect behaviour is referenced here)"
+  ],
+  "screens": [
+    { "name": "Settings (Appearance & Preferences)", "route": "/settings" }
+  ],
+  "roles_and_access": "The /settings route is registered in App.jsx as a child of the ProtectedRoute-wrapped dashboard layout and the sidebar nav entry carries permission: null. Any authenticated user (admin, data_entry or viewer) may open Settings — there is NO role or permission gate beyond being logged in. ProtectedRoute behaviour: while AuthContext is loading it shows a 'Loading...' splash; if there is no user it redirects to /login. All preferences are stored only in the browser's localStorage ('themeConfig') and are therefore per-browser-profile and per-device, not tied to the user account — logging in as a different user on the same browser inherits the same appearance settings, and the same user on a different device sees defaults. The page itself issues no API calls, but the surrounding app session still matters: the axios client attaches the Bearer access_token to all requests, and on any background 401 (e.g. the AuthContext getMe verification or another screen) it attempts a one-time refresh via refresh_token and, on failure, clears localStorage tokens and hard-redirects to /login.",
+  "api_endpoints": [
+    { "method": "N/A", "path": "N/A", "purpose": "The Settings page (/settings) makes NO API calls. All preferences are read from and written to browser localStorage ('themeConfig') via ThemeContext; there is no GET/POST to persist them server-side." },
+    { "method": "GET", "path": "/api/auth/me", "purpose": "Indirect dependency only. Called once by AuthContext on app init to verify the stored token and populate the current user; if it fails the tokens are cleared. Settings does not call this directly but relies on a valid session having been established. Returns 200 {user} or 404 user_not_found." },
+    { "method": "POST", "path": "/api/auth/refresh", "purpose": "Indirect dependency only. Triggered by the axios response interceptor when ANY request returns 401, using the refresh_token; on success stores a new access_token and retries, on failure clears tokens and redirects to /login. Relevant to Settings only for session-expiry behaviour while the page is open. Returns 200 {access_token} or 401 refresh_failed." },
+    { "method": "POST", "path": "/api/auth/logout", "purpose": "Indirect dependency only. Not callable from the Settings page (no logout control here); logout is triggered from the layout/header. Returns 200. Listed for completeness of the auth surface that bounds the session in which Settings runs." }
+  ],
+  "test_data_setup": [
+    "A valid logged-in session for an ADMIN user (valid access_token + refresh_token + user in localStorage).",
+    "A valid logged-in session for a NON-ADMIN user (data_entry or viewer) to confirm Settings is accessible to every role (no permission gate).",
+    "Two browsers / profiles: one with NO 'themeConfig' in localStorage (fresh) to test system-theme detection and the system-preference note; one with an existing 'themeConfig' to test restoration.",
+    "Ability to open browser DevTools to inspect localStorage key 'themeConfig', the <html> element classes ('dark', 'reduce-motion', 'high-contrast'), attributes (data-border-radius, data-density) and inline style.fontFamily, plus the Network tab to confirm zero requests on preference changes.",
+    "Ability to change the OS / browser colour-scheme to dark and to light (e.g. macOS System Settings > Appearance, or DevTools 'Emulate prefers-color-scheme') to test system detection.",
+    "Ability to throttle / go offline to confirm the page and toggles still work with no network (since there are no API calls).",
+    "Ability to expire or corrupt the access_token to exercise the 401 -> refresh -> /login path while Settings is the open page.",
+    "Known starting appearance baseline before each persistence test: theme=light, font=inter, borderRadius=medium, density=comfortable, reducedMotion=false, highContrast=false.",
+    "Realistic India context users for the role checks, e.g. admin 'priya.menon@saranam.in', nurse 'lakshmi.devi@saranam.in' (only used to log in; Settings shows no user data)."
+  ],
+  "test_cases": [
+    {
+      "id": "SET-001",
+      "section": "Page Load & Rendering",
+      "title": "Settings page loads with header and all five preference sections",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Logged in as any authenticated user.",
+      "steps": [
+        "Navigate to /settings (via sidebar 'Settings' link or direct URL).",
+        "Observe the page header and the list of cards top to bottom."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Page renders with no errors/blank screen. Header shows title 'Settings' and subtitle 'Manage your application preferences and appearance'. Exactly five cards render in order: Appearance, Typography, Border Radius, Density, Accessibility. The content is centred in a max-width container (max-w-4xl).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-002",
+      "section": "Page Load & Rendering",
+      "title": "Each section displays its correct title, icon and description",
+      "priority": "Medium",
+      "type": "UI/UX",
+      "preconditions": "On /settings.",
+      "steps": [
+        "Read each card's header.",
+        "Confirm titles, icons and descriptions."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Appearance: 'Customize how the dashboard looks on your device'. Typography (Type icon): 'Choose the font family for the application'. Border Radius (Square icon): 'Adjust the roundness of UI elements'. Density (Layers icon): 'Control the spacing and padding of UI elements'. Accessibility (Accessibility icon): 'Customize accessibility features for better usability'. No icons/text missing or overlapping.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-003",
+      "section": "Page Load & Rendering",
+      "title": "Controls pre-populate / highlight the currently active preferences on load",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "localStorage 'themeConfig' set to {theme:'dark', font:'open-sans', borderRadius:'large', density:'compact', reducedMotion:true, highContrast:false}.",
+      "steps": [
+        "Reload /settings.",
+        "Inspect the state of every control against the stored config."
+      ],
+      "test_data": "themeConfig as above",
+      "expected_result": "Dark Mode switch is ON (Moon icon, 'Dark theme is enabled', Current theme: Dark). 'Open Sans' font button is highlighted (primary border). Border Radius 'large' button highlighted. Density 'compact' button highlighted. Reduce Motion switch ON, High Contrast switch OFF. Controls reflect persisted state exactly — none reset to defaults.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-004",
+      "section": "Page Load & Rendering",
+      "title": "No API/network calls are made on page load or on preference changes",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "On /settings with DevTools Network tab open (cleared/filtered to XHR/Fetch).",
+      "steps": [
+        "Reload /settings and watch Network.",
+        "Toggle dark mode, change font, radius, density, and both accessibility switches.",
+        "Re-check Network for any request beyond static assets/fonts."
+      ],
+      "test_data": "N/A",
+      "expected_result": "No XHR/fetch calls to /api/* are made by the Settings page when loading or when changing any preference. The only network activity is the Google Fonts stylesheet for Inter/Open Sans on first selection. Confirms preferences are purely client-side (localStorage).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-005",
+      "section": "Appearance — Dark Mode",
+      "title": "Toggle Dark Mode ON applies dark theme app-wide immediately",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "On /settings in Light mode (switch OFF).",
+      "steps": [
+        "Click the Dark Mode switch to turn it ON.",
+        "Observe the page and the icon/label text.",
+        "Inspect <html> element classes in DevTools."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Theme switches to dark instantly without reload. Switch shows ON, icon changes to Moon, helper text reads 'Dark theme is enabled', and 'Current theme: Dark'. document.documentElement carries the 'dark' class. Surrounding chrome (sidebar/header) also renders dark.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-006",
+      "section": "Appearance — Dark Mode",
+      "title": "Toggle Dark Mode OFF returns to light theme",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "On /settings in Dark mode (switch ON).",
+      "steps": [
+        "Click the Dark Mode switch to turn it OFF.",
+        "Observe icon/label and <html> class."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Theme returns to light instantly. Switch OFF, Sun icon shown, helper text 'Light theme is enabled', 'Current theme: Light'. The 'dark' class is removed from document.documentElement.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-007",
+      "section": "Appearance — Dark Mode",
+      "title": "Dark Mode preference persists across full page reload",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "On /settings.",
+      "steps": [
+        "Set Dark Mode ON.",
+        "Press F5 / hard-reload the page.",
+        "Re-open /settings if needed and inspect the switch and <html> class."
+      ],
+      "test_data": "N/A",
+      "expected_result": "After reload the theme is still dark: switch ON, 'dark' class present, localStorage 'themeConfig'.theme === 'dark'. Preference survives reload (saved to localStorage immediately on toggle).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-008",
+      "section": "Appearance — Dark Mode",
+      "title": "Dark Mode persists when navigating away to another screen and back",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "Logged in, on /settings.",
+      "steps": [
+        "Set Dark Mode ON in Settings.",
+        "Navigate to /dashboard (or /patients) via the sidebar.",
+        "Confirm that screen also renders dark.",
+        "Return to /settings."
+      ],
+      "test_data": "N/A",
+      "expected_result": "The dark theme is applied app-wide on the other screen (it is a document-level class, not page-local). On returning to /settings the Dark Mode switch is still ON. No reset on navigation.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-009",
+      "section": "Appearance — Dark Mode",
+      "title": "Dark Mode preference is shared in a new tab of the same browser profile",
+      "priority": "Medium",
+      "type": "Data Integrity",
+      "preconditions": "Dark Mode set ON; app open in one tab.",
+      "steps": [
+        "Open a second tab to the app /settings (same browser profile).",
+        "Observe theme and switch state."
+      ],
+      "test_data": "N/A",
+      "expected_result": "The new tab loads in dark mode and the Dark Mode switch is ON, because both tabs read the same localStorage 'themeConfig'. (Note: a change made in one tab is reflected in the other only after that tab reloads — localStorage is read on mount.)",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-010",
+      "section": "Appearance — Current Theme Info",
+      "title": "System-preference note shown only when no theme preference is stored",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Two states available: (a) fresh profile with NO 'themeConfig' in localStorage; (b) any profile that has saved a preference.",
+      "steps": [
+        "On a fresh profile (clear localStorage), open /settings and read the note under 'Current theme'.",
+        "Toggle any preference (which writes themeConfig), reload, and re-read the note."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Fresh profile: note reads 'Your theme preference is saved and will persist across sessions. Initially set based on your system preference.' After a preference is stored, the second sentence ('Initially set based on your system preference.') no longer appears.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-011",
+      "section": "Appearance — System Theme Detection",
+      "title": "Default theme follows OS prefers-color-scheme on a fresh profile",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Fresh browser profile with NO 'themeConfig' in localStorage.",
+      "steps": [
+        "Set the OS/browser colour scheme to Dark (or DevTools emulate prefers-color-scheme: dark).",
+        "Log in and open /settings.",
+        "Observe initial theme.",
+        "Repeat with OS scheme set to Light on another fresh profile."
+      ],
+      "test_data": "N/A",
+      "expected_result": "With no stored preference and OS=dark, the app defaults to dark (switch ON). With OS=light it defaults to light. The default is derived from window.matchMedia('(prefers-color-scheme: dark)').",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-012",
+      "section": "Appearance — System Theme Detection",
+      "title": "Once a preference is stored, OS theme changes do NOT auto-switch the app",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "User has explicitly set a theme (themeConfig exists in localStorage).",
+      "steps": [
+        "With a stored preference (e.g. light), change the OS colour scheme to dark while the app is open.",
+        "Observe whether the app theme changes."
+      ],
+      "test_data": "N/A",
+      "expected_result": "The app does NOT auto-switch to dark; it respects the user's explicit stored preference. The OS-change listener only auto-switches when no themeConfig is stored.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-013",
+      "section": "Typography",
+      "title": "Selecting each font option highlights it and applies the font app-wide",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "On /settings.",
+      "steps": [
+        "Click 'System Default'.",
+        "Observe highlight and the document text font.",
+        "Click 'Open Sans', then 'Inter', observing each time.",
+        "Inspect document.documentElement.style.fontFamily in DevTools."
+      ],
+      "test_data": "Inter / System Default / Open Sans",
+      "expected_result": "Only one button is highlighted at a time (selected button gets primary border + tinted background). The document root font-family updates to the selected stack (System Default = -apple-system stack; Open Sans / Inter = their stacks). The change applies app-wide, not just to the sample text.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-014",
+      "section": "Typography",
+      "title": "Web-font stylesheet is injected once for Inter and Open Sans",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "On /settings, Network tab open.",
+      "steps": [
+        "Select 'Open Sans'; watch Network for the Google Fonts stylesheet.",
+        "Select 'Inter'; watch Network.",
+        "Re-select 'Open Sans' again and confirm no duplicate stylesheet link is added.",
+        "Select 'System Default'."
+      ],
+      "test_data": "N/A",
+      "expected_result": "A Google Fonts <link> (id font-open-sans / font-inter) is added to <head> the first time each is chosen and the font loads. Re-selecting an already-loaded font does not append a duplicate link. 'System Default' loads no external font (import is null).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-015",
+      "section": "Typography",
+      "title": "Font selection persists across reload and navigation",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "On /settings.",
+      "steps": [
+        "Select 'Open Sans'.",
+        "Reload the page; confirm Open Sans still selected/applied.",
+        "Navigate to /dashboard and back; confirm font unchanged.",
+        "Inspect localStorage 'themeConfig'.font."
+      ],
+      "test_data": "open-sans",
+      "expected_result": "After reload and navigation the 'Open Sans' button stays highlighted and the document font remains Open Sans. localStorage 'themeConfig'.font === 'open-sans'.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-016",
+      "section": "Border Radius",
+      "title": "Selecting each radius option highlights it, updates preview swatch and data attribute",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "On /settings.",
+      "steps": [
+        "Click 'none', then 'small', 'medium', 'large' in turn.",
+        "Observe the highlighted button, the preview swatch radius and document.documentElement[data-border-radius]."
+      ],
+      "test_data": "none / small / medium / large",
+      "expected_result": "Only the chosen button is highlighted. The 12x12 preview swatch radius matches (none=0, small=0.25rem, medium=0.5rem, large=0.75rem). data-border-radius attribute on <html> equals the selected value. App UI roundness updates accordingly.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-017",
+      "section": "Border Radius",
+      "title": "Border radius preference persists across reload",
+      "priority": "Medium",
+      "type": "Data Integrity",
+      "preconditions": "On /settings.",
+      "steps": [
+        "Select 'large'.",
+        "Reload the page and inspect the highlighted button and data-border-radius."
+      ],
+      "test_data": "large",
+      "expected_result": "After reload 'large' remains highlighted, data-border-radius='large', localStorage 'themeConfig'.borderRadius === 'large'.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-018",
+      "section": "Density",
+      "title": "Selecting each density option highlights it and updates the data attribute",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "On /settings.",
+      "steps": [
+        "Click 'compact', then 'comfortable', then 'spacious'.",
+        "Observe highlight, the preview bar heights and document.documentElement[data-density]."
+      ],
+      "test_data": "compact / comfortable / spacious",
+      "expected_result": "Only one button highlighted at a time. Preview bar heights differ by option (compact 6px, comfortable 8px, spacious 10px). data-density attribute on <html> equals the selected value.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-019",
+      "section": "Density",
+      "title": "Density preference persists across reload and navigation",
+      "priority": "Medium",
+      "type": "Data Integrity",
+      "preconditions": "On /settings.",
+      "steps": [
+        "Select 'spacious'.",
+        "Reload and navigate to /dashboard and back.",
+        "Inspect data-density and localStorage."
+      ],
+      "test_data": "spacious",
+      "expected_result": "After reload/navigation 'spacious' stays highlighted, data-density='spacious', localStorage 'themeConfig'.density === 'spacious'.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-020",
+      "section": "Accessibility — Reduce Motion",
+      "title": "Reduce Motion toggle adds/removes the reduce-motion class",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "On /settings with Reduce Motion OFF.",
+      "steps": [
+        "Turn the Reduce Motion switch ON; inspect <html> classes.",
+        "Turn it OFF again; inspect again."
+      ],
+      "test_data": "N/A",
+      "expected_result": "ON adds the 'reduce-motion' class to document.documentElement; OFF removes it. Switch reflects state. (Visual effect: animations/transitions minimised app-wide where CSS honours the class.)",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-021",
+      "section": "Accessibility — High Contrast",
+      "title": "High Contrast toggle adds/removes the high-contrast class",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "On /settings with High Contrast OFF.",
+      "steps": [
+        "Turn the High Contrast switch ON; inspect <html> classes.",
+        "Turn it OFF again; inspect again."
+      ],
+      "test_data": "N/A",
+      "expected_result": "ON adds the 'high-contrast' class to document.documentElement; OFF removes it. Switch reflects state.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-022",
+      "section": "Accessibility — Persistence",
+      "title": "Reduce Motion and High Contrast persist across reload",
+      "priority": "Medium",
+      "type": "Data Integrity",
+      "preconditions": "On /settings.",
+      "steps": [
+        "Turn Reduce Motion ON and High Contrast ON.",
+        "Reload the page.",
+        "Confirm both switches and both <html> classes after reload."
+      ],
+      "test_data": "N/A",
+      "expected_result": "After reload both switches are ON, classes 'reduce-motion' and 'high-contrast' both present on <html>, localStorage 'themeConfig'.reducedMotion === true and .highContrast === true.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-023",
+      "section": "Data Integrity — Combined Config",
+      "title": "Changing one preference does not reset the others (single merged config)",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "On /settings. Set a known mixed baseline: dark ON, font Open Sans, radius large, density compact, reduce-motion ON, high-contrast OFF.",
+      "steps": [
+        "Confirm the baseline above is applied.",
+        "Now change ONLY the density to 'spacious'.",
+        "Inspect localStorage 'themeConfig' and all other controls.",
+        "Reload and re-verify all six values."
+      ],
+      "test_data": "themeConfig mixed baseline",
+      "expected_result": "Only density changes to 'spacious'; theme=dark, font=open-sans, borderRadius=large, reducedMotion=true, highContrast=false remain unchanged in both the UI and the single localStorage 'themeConfig' object. The config is merged, not overwritten. All values survive reload.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-024",
+      "section": "Data Integrity — Corruption Handling",
+      "title": "Corrupted themeConfig JSON falls back to defaults without crashing",
+      "priority": "High",
+      "type": "Negative",
+      "preconditions": "Logged in; DevTools available.",
+      "steps": [
+        "In DevTools, set localStorage 'themeConfig' to an invalid value, e.g. the string 'not-json{' .",
+        "Reload /settings.",
+        "Observe the page and console."
+      ],
+      "test_data": "themeConfig = 'not-json{'",
+      "expected_result": "Page still loads (no white screen / crash). A console error 'Failed to parse theme config:' is logged and the app falls back to DEFAULT_CONFIG: theme follows system, font=inter, borderRadius=medium, density=comfortable, reducedMotion=false, highContrast=false. Controls reflect these defaults.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-025",
+      "section": "Data Integrity — Partial Config",
+      "title": "Partial themeConfig is merged onto defaults for missing keys",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "Logged in; DevTools available.",
+      "steps": [
+        "Set localStorage 'themeConfig' to a partial object, e.g. {\"theme\":\"dark\"} (no font/radius/density/accessibility keys).",
+        "Reload /settings.",
+        "Inspect every control."
+      ],
+      "test_data": "themeConfig = {\"theme\":\"dark\"}",
+      "expected_result": "theme applies as dark, and all missing keys take defaults (font=inter, borderRadius=medium, density=comfortable, reducedMotion=false, highContrast=false). No crash; stored config is re-saved as the full merged object after first change.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-026",
+      "section": "Accessibility / Keyboard",
+      "title": "Switches are keyboard-operable and labels are correctly associated",
+      "priority": "Medium",
+      "type": "UI/UX",
+      "preconditions": "On /settings.",
+      "steps": [
+        "Tab through the page to reach the Dark Mode switch.",
+        "Press Space/Enter to toggle it.",
+        "Click the 'Dark Mode' text label and confirm it toggles the switch (htmlFor association).",
+        "Repeat focus + Space on Reduce Motion and High Contrast switches."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Each switch is reachable via Tab, shows a visible focus ring, and toggles with Space/Enter. Clicking a Label (Dark Mode / Reduce Motion / High Contrast) toggles its associated switch because htmlFor matches the switch id (dark-mode, reduced-motion, high-contrast).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-027",
+      "section": "Accessibility / Keyboard",
+      "title": "Font / Border Radius / Density option buttons are keyboard-focusable and operable",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "On /settings.",
+      "steps": [
+        "Tab to a font option button and press Enter/Space.",
+        "Repeat for a Border Radius and a Density option button."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Each option is a real <button>, focusable via Tab with a visible focus state, and selecting via Enter/Space applies the preference and updates the highlight — equivalent to a mouse click.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-028",
+      "section": "Offline / Resilience",
+      "title": "All preference controls work with no network connectivity",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "On /settings.",
+      "steps": [
+        "Set DevTools Network to Offline (or disable Wi-Fi).",
+        "Toggle dark mode, change font/radius/density, toggle accessibility switches.",
+        "Reload the page while offline (from cache) if the app is a SPA already loaded."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Every preference change works and persists to localStorage with no errors, because the page issues no network requests. (External Google Font may fail to fetch while offline and fall back to the next font in the stack, which is acceptable.)",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-029",
+      "section": "Route Guard & Session",
+      "title": "Unauthenticated access to /settings redirects to login",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "No valid session (clear localStorage access_token / refresh_token / user, or open in a logged-out profile).",
+      "steps": [
+        "Directly enter the URL /settings.",
+        "Observe routing behaviour."
+      ],
+      "test_data": "N/A",
+      "expected_result": "ProtectedRoute sees no user and redirects (Navigate replace) to /login. The Settings page is not rendered. After logging in, navigating to /settings succeeds.",
+      "api_reference": "GET /api/auth/me"
+    },
+    {
+      "id": "SET-030",
+      "section": "Route Guard & Session",
+      "title": "Settings is accessible to every authenticated role (no permission gate)",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Separate sessions for admin, data_entry and viewer users.",
+      "steps": [
+        "Log in as an admin and open /settings; confirm it renders.",
+        "Log out, log in as a data_entry user, open /settings; confirm it renders.",
+        "Repeat for a viewer user."
+      ],
+      "test_data": "admin / data_entry / viewer",
+      "expected_result": "All three roles can open /settings and see all five sections — there is no 'Access Denied' screen, because the route and the sidebar nav entry carry permission: null / no requiredRole.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-031",
+      "section": "Route Guard & Session",
+      "title": "Expired access token while on /settings triggers refresh-and-retry, then /login on failure",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Logged in on /settings.",
+      "steps": [
+        "In DevTools, corrupt/expire the access_token in localStorage.",
+        "Trigger any authenticated request that runs while the app is active (e.g. navigate to a data screen, or let AuthContext re-verify) so a 401 is returned.",
+        "Also invalidate the refresh_token and repeat to force refresh failure."
+      ],
+      "test_data": "N/A",
+      "expected_result": "On a 401 the axios interceptor attempts a one-time refresh via /api/auth/refresh; if it succeeds the request retries transparently and the user stays in the app. If refresh fails, localStorage tokens/user are cleared and the browser hard-redirects to /login. The Settings appearance preferences in 'themeConfig' are NOT cleared by logout (they are separate from auth tokens).",
+      "api_reference": "POST /api/auth/refresh"
+    },
+    {
+      "id": "SET-032",
+      "section": "Preference Scope / Account Independence",
+      "title": "Appearance preferences are per-browser, not per-user-account (documented behaviour)",
+      "priority": "Medium",
+      "type": "Data Integrity",
+      "preconditions": "Two different user accounts; one browser profile.",
+      "steps": [
+        "Log in as User A, set Dark Mode ON + font Open Sans, then log out.",
+        "Log in as User B in the same browser and open /settings.",
+        "Then log in as User A on a DIFFERENT device/profile and open /settings."
+      ],
+      "test_data": "User A and User B",
+      "expected_result": "Same browser: User B inherits User A's dark + Open Sans settings (they live in shared localStorage, not the account). Different device: User A sees defaults (no themeConfig there). This confirms preferences are intentionally browser-scoped and NOT synced to the backend. Flag as a product note if account-level sync was expected.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "SET-033",
+      "section": "Not-Implemented Verification",
+      "title": "Confirm Settings page has NO profile, password, notification, organization or logout controls",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "On /settings as any user.",
+      "steps": [
+        "Scroll the entire page top to bottom.",
+        "Look specifically for: a profile/edit form (name/email/phone), a Change Password form, notification preference toggles, organization/system settings, and a Logout button."
+      ],
+      "test_data": "N/A",
+      "expected_result": "None of these exist on the Settings page — only the five appearance/preference sections are present. This is expected per the current build. (Logout, profile and password management, if needed, are handled outside this page / in the Auth & Users modules. There is no change-password endpoint in the backend at all.) Record as PASS if all five appearance sections are present and none of the listed extra controls appear.",
+      "api_reference": "N/A"
+    }
+  ]
+}

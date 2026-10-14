@@ -1,0 +1,86 @@
+# Development Environment Configuration
+FLASK_APP=run.py
+FLASK_ENV=development
+FLASK_DEBUG=True
+
+# Local Development Database (Migrated to Neon DB)
+#DATABASE_URL="postgresql://neondb_owner:npg_Ftn08NymXKpO@ep-small-cloud-a4mq6l2y-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+
+#local db
+#DATABASE_URL=postgresql://farzanmanzer@localhost:5432/cv_raman_health
+
+# Supabase Development Database
+# DATABASE_URL=postgresql://postgres:kyhqah-7vospu-waSred@db.fkzwqrwnebdjsegjyczs.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres.fkzwqrwnebdjsegjyczs:kyhqah-7vospu-waSred@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres
+# Security Keys (Generated)
+SECRET_KEY=zD9Q8Sd6O83AbrMMxJFQ_SEHRzkltIs7Lz8umIMZ3ew
+JWT_SECRET_KEY=sAuTvMXaK5Jc5xuZCzbHSNDQMrijSxA5yPj_gqh6slo
+JWT_ACCESS_TOKEN_EXPIRES=3600
+JWT_REFRESH_TOKEN_EXPIRES=2592000
+
+# PII Encryption Key (for Patient data - CRITICAL!)
+# NEVER commit this to version control, store securely!
+ENCRYPTION_KEY=DBefsTLp0nC_CBZByqlLMSZZgp_KZsRfTrUJEJJM5ZM=
+
+# CORS Configuration (Update with your production domain)
+CORS_ORIGINS=http://localhost:5173,http://localhost:5174
+
+# Application Configuration
+APP_NAME=CV Raman Health Care
+APP_VERSION=2.0.0
+PAGINATION_PAGE_SIZE=50
+MAX_CONTENT_LENGTH=16777216
+
+# =============================================================================
+# AUDIT & COMPLIANCE
+# =============================================================================
+
+# Audit Logging
+ENABLE_AUDIT_LOGGING=true
+AUDIT_LOG_RETENTION_DAYS=2555  # 7 years (healthcare compliance)
+
+# Consent Management
+CONSENT_DEFAULT_DURATION_DAYS=365  # Default: 1 year
+REQUIRE_CONSENT_FOR_PATIENT_DATA=true
+
+# =============================================================================
+# FEATURE FLAGS
+# =============================================================================
+
+# Enable/disable features
+FEATURE_PROCESSING_PIPELINE=true      # Use hybrid processing layer
+FEATURE_LEGACY_JSONB_BACKUP=true      # Keep JSONB backup in submissions
+FEATURE_AUTO_CREATE_PATIENT=true      # Auto-create patient from demographics
+FEATURE_AUTO_CREATE_ENCOUNTER=true    # Auto-create encounter if needed
+FEATURE_CLINICAL_DATA_EXTRACTION=true # Extract vitals, diagnoses, etc.
+
+# =============================================================================
+# ABDM INTEGRATION (For Future Use)
+# =============================================================================
+
+ABDM_ENABLED=false
+ABDM_ENVIRONMENT=sandbox  # sandbox or production
+# LLM Configuration
+OPENAI_API_KEY=sk-your-openai-key-here
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-key-here
+DEFAULT_LLM_PROVIDER=openai
+
+# File Upload
+MAX_UPLOAD_SIZE_MB=50
+ALLOWED_FILE_TYPES=xlsx,xls,csv,pdf
+
+# Bulk Import Settings
+MAX_APPOINTMENTS_PER_BATCH=1000
+AUTO_CREATE_PATIENTS=true
+CONFLICT_RESOLUTION_ENABLED=true
+FUZZY_MATCH_THRESHOLD=80
+
+ACCOUNT_SID=intellivatetech1
+API_KEY=737b7f119a31c2868d5bd2f812fa1ad19e67053a3769d9ee
+API_TOKEN=6e52a8737c341e0c0cbfecb064b3413d4557923a3810bf32
+EXOTEL_CALLER_ID=011-411-94094
+
+CLOUDINARY_CLOUD_NAME=dbpdzqfin
+CLOUDINARY_API_KEY=552531927278534
+CLOUDINARY_API_SECRET=nWPEW2h31Ald0kz5jZuogJ90i04
+CLOUDINARY_URL=CLOUDINARY_URL=cloudinary://552531927278534:nWPEW2h31Ald0kz5jZuogJ90i04@dbpdzqfin

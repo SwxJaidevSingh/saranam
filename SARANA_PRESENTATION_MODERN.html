@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CV Raman Health - Healthcare Innovation Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0a0e27;
+            color: #ffffff;
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+        }
+
+        /* Hero Section */
+        .hero-section {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-section::before {
+            content: '';
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            background: url('data:image/svg+xml,<svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"><g fill="none" fill-rule="evenodd"><g fill="%23ffffff" fill-opacity="0.05"><path d="M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z"/></g></g></svg>') repeat;
+            animation: drift 20s infinite linear;
+        }
+
+        @keyframes drift {
+            from { transform: translate(0, 0); }
+            to { transform: translate(-60px, -60px); }
+        }
+
+        .hero-content {
+            text-align: center;
+            z-index: 2;
+            padding: 40px;
+            max-width: 1200px;
+        }
+
+        .hero-content h1 {
+            font-size: 72px;
+            font-weight: 800;
+            margin-bottom: 20px;
+            background: linear-gradient(to right, #ffffff, #e0e0e0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -2px;
+        }
+
+        .hero-subtitle {
+            font-size: 28px;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 40px;
+            font-weight: 300;
+        }
+
+        .hero-features {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 60px;
+        }
+
+        .hero-feature-pill {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 18px;
+            transition: all 0.3s;
+        }
+
+        .hero-feature-pill:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        /* Features Section */
+        .features-section {
+            min-height: 100vh;
+            background: #ffffff;
+            color: #1a1a2e;
+            padding: 100px 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .section-title {
+            font-size: 56px;
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 60px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 40px;
+            margin-bottom: 80px;
+        }
+
+        .feature-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            padding: 40px;
+            color: white;
+            transition: transform 0.3s, box-shadow 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.3; }
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(102, 126, 234, 0.3);
+        }
+
+        .feature-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .feature-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .feature-description {
+            font-size: 18px;
+            line-height: 1.6;
+            opacity: 0.95;
+            position: relative;
+            z-index: 1;
+        }
+
+        .feature-list {
+            list-style: none;
+            margin-top: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .feature-list li {
+            padding: 8px 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .feature-list li::before {
+            content: '✨';
+            margin-right: 10px;
+        }
+
+        /* Services Section */
+        .services-section {
+            min-height: 100vh;
+            background: linear-gradient(180deg, #0a0e27 0%, #16213e 100%);
+            padding: 100px 20px;
+        }
+
+        .services-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .service-box {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 40px 30px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .service-box:hover {
+            background: rgba(102, 126, 234, 0.1);
+            border-color: rgba(102, 126, 234, 0.3);
+            transform: translateY(-5px);
+        }
+
+        .service-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            filter: grayscale(0%);
+        }
+
+        .service-name {
+            font-size: 24px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 15px;
+        }
+
+        .service-detail {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        /* Appointment System Section */
+        .appointment-section {
+            min-height: 100vh;
+            background: #ffffff;
+            color: #1a1a2e;
+            padding: 100px 20px;
+            position: relative;
+        }
+
+        .appointment-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            max-width: 1400px;
+            margin: 0 auto;
+            align-items: center;
+        }
+
+        .appointment-visual {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border-radius: 20px;
+            padding: 40px;
+            position: relative;
+            min-height: 500px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .calendar-mock {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            width: 100%;
+        }
+
+        .calendar-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px 10px 0 0;
+            text-align: center;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .calendar-day {
+            aspect-ratio: 1;
+            background: #f0f0f0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .calendar-day.has-appointment {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+        }
+
+        .appointment-content h2 {
+            font-size: 48px;
+            font-weight: 800;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .appointment-features {
+            list-style: none;
+        }
+
+        .appointment-features li {
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        .appointment-features li::before {
+            content: '🎯';
+            margin-right: 15px;
+            font-size: 24px;
+        }
+
+        /* Analytics Section */
+        .analytics-section {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 100px 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .analytics-content {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .analytics-title {
+            font-size: 56px;
+            font-weight: 800;
+            text-align: center;
+            color: white;
+            margin-bottom: 60px;
+        }
+
+        .dashboard-preview {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+        }
+
+        .dashboard-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            padding: 30px;
+            color: white;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 48px;
+            font-weight: 800;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .chart-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            min-height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .chart-placeholder {
+            width: 100%;
+            height: 250px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #667eea;
+        }
+
+        /* Call to Action */
+        .cta-section {
+            min-height: 100vh;
+            background: #0a0e27;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 100px 20px;
+        }
+
+        .cta-content {
+            text-align: center;
+            max-width: 900px;
+        }
+
+        .cta-title {
+            font-size: 64px;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .cta-subtitle {
+            font-size: 24px;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 50px;
+            line-height: 1.6;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .cta-button {
+            padding: 20px 50px;
+            font-size: 20px;
+            font-weight: 600;
+            border-radius: 50px;
+            text-decoration: none;
+            transition: all 0.3s;
+            display: inline-block;
+        }
+
+        .cta-button.primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .cta-button.primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 20px 40px rgba(102, 126, 234, 0.3);
+        }
+
+        .cta-button.secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .cta-button.secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Floating Elements */
+        .floating-element {
+            position: absolute;
+            opacity: 0.1;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero-content h1 { font-size: 48px; }
+            .section-title { font-size: 36px; }
+            .features-grid { grid-template-columns: 1fr; }
+            .appointment-grid { grid-template-columns: 1fr; }
+            .dashboard-stats { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="hero-content">
+            <h1>CV RAMAN HEALTH</h1>
+            <p class="hero-subtitle">Next-Generation Healthcare Management Platform</p>
+            <div class="hero-features">
+                <div class="hero-feature-pill">🤖 AI-Powered</div>
+                <div class="hero-feature-pill">☁️ Cloud Native</div>
+                <div class="hero-feature-pill">📱 Mobile First</div>
+                <div class="hero-feature-pill">🔒 ABDM Compliant</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Core Features Section -->
+    <section class="features-section">
+        <div class="container">
+            <h2 class="section-title">Powerful Features That Transform Healthcare</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🧠</div>
+                    <h3 class="feature-title">AI-Enhanced Form Builder</h3>
+                    <p class="feature-description">Create intelligent data collection forms with our AI-powered builder</p>
+                    <ul class="feature-list">
+                        <li>Smart field suggestions based on form type</li>
+                        <li>Auto-validation rules generation</li>
+                        <li>Multi-language support</li>
+                        <li>Conditional logic & branching</li>
+                        <li>Real-time data quality checks</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <div class="feature-icon">🏥</div>
+                    <h3 class="feature-title">Smart Patient Management</h3>
+                    <p class="feature-description">Complete patient lifecycle management with bed allocation system</p>
+                    <ul class="feature-list">
+                        <li>Intelligent bed management & allocation</li>
+                        <li>ABHA integration for unified records</li>
+                        <li>Real-time patient tracking</li>
+                        <li>Automated admission/discharge workflows</li>
+                        <li>Emergency patient prioritization</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                    <div class="feature-icon">👨‍⚕️</div>
+                    <h3 class="feature-title">Healthcare Provider System</h3>
+                    <p class="feature-description">Comprehensive provider management with scheduling</p>
+                    <ul class="feature-list">
+                        <li>Weekly schedule management</li>
+                        <li>Working hours configuration</li>
+                        <li>Leave & availability tracking</li>
+                        <li>Specialization mapping</li>
+                        <li>Performance analytics</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                    <div class="feature-icon">📊</div>
+                    <h3 class="feature-title">Advanced Analytics Dashboard</h3>
+                    <p class="feature-description">Real-time insights and predictive analytics</p>
+                    <ul class="feature-list">
+                        <li>Clinical outcome tracking</li>
+                        <li>Resource utilization metrics</li>
+                        <li>Patient flow analysis</li>
+                        <li>Financial performance indicators</li>
+                        <li>Predictive health trends</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Services Section -->
+    <section class="services-section">
+        <div class="container">
+            <h2 class="section-title" style="color: white; margin-bottom: 80px;">Complete Healthcare Service Management</h2>
+            <div class="services-container">
+                <div class="service-box">
+                    <div class="service-icon">🏥</div>
+                    <div class="service-name">IPD Services</div>
+                    <div class="service-detail">Inpatient management with bed tracking, admission workflows, and discharge summaries</div>
+                </div>
+                <div class="service-box">
+                    <div class="service-icon">🩺</div>
+                    <div class="service-name">OPD Services</div>
+                    <div class="service-detail">Outpatient consultations with queue management and prescription handling</div>
+                </div>
+                <div class="service-box">
+                    <div class="service-icon">💪</div>
+                    <div class="service-name">Physiotherapy</div>
+                    <div class="service-detail">Session scheduling, exercise plans, and progress tracking</div>
+                </div>
+                <div class="service-box">
+                    <div class="service-icon">🏠</div>
+                    <div class="service-name">Home Care Services</div>
+                    <div class="service-detail">Home visit scheduling, route optimization, and remote monitoring</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Appointment System Section -->
+    <section class="appointment-section">
+        <div class="appointment-grid">
+            <div class="appointment-content">
+                <h2>Intelligent Appointment Management</h2>
+                <ul class="appointment-features">
+                    <li>Calendar view with drag-and-drop scheduling</li>
+                    <li>Multi-provider appointment coordination</li>
+                    <li>Automated reminder system (SMS/WhatsApp)</li>
+                    <li>Consultation type management</li>
+                    <li>Bulk appointment upload via CSV/Excel</li>
+                    <li>Smart conflict detection & resolution</li>
+                    <li>Waiting list management</li>
+                    <li>Recurring appointment templates</li>
+                </ul>
+            </div>
+            <div class="appointment-visual">
+                <div class="calendar-mock">
+                    <div class="calendar-header">December 2024 - Appointments</div>
+                    <div class="calendar-grid">
+                        <div class="calendar-day">1</div>
+                        <div class="calendar-day has-appointment">2</div>
+                        <div class="calendar-day">3</div>
+                        <div class="calendar-day has-appointment">4</div>
+                        <div class="calendar-day">5</div>
+                        <div class="calendar-day">6</div>
+                        <div class="calendar-day">7</div>
+                        <div class="calendar-day has-appointment">8</div>
+                        <div class="calendar-day">9</div>
+                        <div class="calendar-day has-appointment">10</div>
+                        <div class="calendar-day">11</div>
+                        <div class="calendar-day has-appointment">12</div>
+                        <div class="calendar-day">13</div>
+                        <div class="calendar-day">14</div>
+                        <div class="calendar-day has-appointment">15</div>
+                        <div class="calendar-day has-appointment">16</div>
+                        <div class="calendar-day">17</div>
+                        <div class="calendar-day has-appointment">18</div>
+                        <div class="calendar-day">19</div>
+                        <div class="calendar-day">20</div>
+                        <div class="calendar-day">21</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Analytics Section -->
+    <section class="analytics-section">
+        <div class="analytics-content">
+            <h2 class="analytics-title">Real-Time Analytics That Drive Decisions</h2>
+            <div class="dashboard-preview">
+                <div class="dashboard-header">
+                    <h3 style="font-size: 28px; color: #1a1a2e;">Healthcare Analytics Dashboard</h3>
+                    <span style="color: #667eea; font-size: 18px;">Live Data</span>
+                </div>
+                <div class="dashboard-stats">
+                    <div class="stat-card">
+                        <div class="stat-number">12,847</div>
+                        <div class="stat-label">Total Patients</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <div class="stat-number">3,421</div>
+                        <div class="stat-label">Monthly Appointments</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <div class="stat-number">89%</div>
+                        <div class="stat-label">Bed Occupancy</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                        <div class="stat-number">₹24.5L</div>
+                        <div class="stat-label">Monthly Revenue</div>
+                    </div>
+                </div>
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <div class="chart-placeholder">📈 Patient Flow Trends</div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-placeholder">🗺️ Geographic Distribution</div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-placeholder">⚠️ Risk Assessment Matrix</div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-placeholder">💊 Treatment Outcomes</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Call to Action -->
+    <section class="cta-section">
+        <div class="cta-content">
+            <h2 class="cta-title">Ready to Transform Your Healthcare Delivery?</h2>
+            <p class="cta-subtitle">Join leading healthcare organizations already using CV Raman Health to deliver better patient outcomes, streamline operations, and drive growth.</p>
+            <div class="cta-buttons">
+                <a href="#" class="cta-button primary">Schedule Demo</a>
+                <a href="#" class="cta-button secondary">Download Brochure</a>
+            </div>
+        </div>
+    </section>
+</body>
+</html>

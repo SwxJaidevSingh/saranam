@@ -1,0 +1,6 @@
+patient_name,patient_phone,patient_email,patient_dob,provider_name,appointment_date,appointment_time,duration_minutes,appointment_type,chief_complaint,notes
+Rajesh Kumar,9876543210,rajesh@example.com,1985-06-15,Dr. Sharma,2026-03-20,09:00,30,consultation,Routine checkup,First visit
+Priya Singh,9123456789,priya@example.com,1990-03-22,Dr. Mehta,2026-03-20,10:00,45,followup,Diabetes follow-up,Regular patient
+Amit Patel,9988776655,,1978-11-10,Dr. Sharma,2026-03-21,14:00,30,consultation,Back pain,
+Sunita Reddy,8877665544,sunita@yahoo.com,1995-08-05,Dr. Mehta,2026-03-22,09:30,60,procedure,Minor surgery,Requires anesthesia
+Vikram Iyer,9001234567,vikram@gmail.com,1988-04-12,Dr. Sharma,2026-03-20,11:00,30,followup,Hypertension checkup,Monthly followup

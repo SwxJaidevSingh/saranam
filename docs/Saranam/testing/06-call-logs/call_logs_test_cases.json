@@ -1,0 +1,1361 @@
+{
+  "module": "Call Logs",
+  "module_code": "CL",
+  "version": "1.0",
+  "summary": "GO-LIVE manual test pack for the Call Logs / Smart Outreach module of Saranam India Health Care. The module is rendered by CallLogsPage and is an admin-only outbound communication hub built on the Exotel telephony API. It contains four primary tabs: Dial (priority outreach queue + staff registry sidebar + live Call HUD), History (call logs from Exotel + SOP documentation history), Escalated (persisted SOP escalations), and Scheduler (persistent outreach schedule with auto-generate). It also includes a SOP documentation modal, a per-agent on-duty toggle, and an EmailModal component (orphaned in code, see defects). All API calls go through axios apiClient with baseURL VITE_API_URL (default http://localhost:5000/api) and a Bearer access_token request interceptor; a 401 triggers a token-refresh-then-retry, and if refresh fails the user is redirected to /login.",
+  "in_scope": [
+    "Permission / route guard: admin-only access to /call-logs and visibility of the sidebar 'Call Logs' item",
+    "Dial tab: priority outreach queue (OutreachQueueView), patient search, pagination, status badges, call/caregiver dropdown, schedule-for-later popover, manual SOP open",
+    "Staff Registry sidebar (StaffSidebar): on-duty toggle, available count, busy state, pagination, empty state",
+    "Live Call HUD (CallHUD): live session list, expand/collapse, document (SOP) and end-session actions, call-status polling",
+    "Initiating a call (Exotel make-call) including from/to derivation, no-available-staff guard, missing-number guard, 403 credential error",
+    "SOP documentation modal: capture severity/relationship/reason/symptoms/advice/notes, escalate flag, save, view existing SOP",
+    "History tab: Call Logs sub-tab (Exotel calls list, recording playback, status colours, empty/error states, stat cards), SOP Documentation sub-tab (paginated history), date-range filter, refresh, export",
+    "Escalated tab: persisted escalations list, severity colour bar, HomeCare action, Follow Up scheduling popover, Dismiss",
+    "Scheduler tab: persistent schedule list, add to schedule, remove, auto-generate weekly plan, empty state",
+    "EmailModal: compose subject/body, required-field disabling, send, cancel (tested at component/intended level — see orphaned-component defect)",
+    "API-level validation of every endpoint in api/call-log.js and backend/app/call_logs/routes.py with payloads and 2xx/4xx/5xx handling",
+    "Data integrity: SOP appears in history and against patient; escalation flag surfaces in Escalated; schedule add/remove reflects in list"
+  ],
+  "out_of_scope": [
+    "Exotel telephony internals, actual voice connectivity, recording generation, and Exotel-side billing",
+    "Inbound routing webhook (/api/exotel/inbound) behaviour from Exotel's side (server-to-server, not user-facing UI)",
+    "Patients module CRUD, Providers module CRUD (validated only as data dependencies)",
+    "SMTP server provisioning and email deliverability (only the send-email request/response contract is in scope)",
+    "Backend unit tests, load/performance testing, and penetration testing",
+    "HomeCare referral routing (handleEscalateToHomeCare is a client-only stub with a TODO; no API call is made)"
+  ],
+  "screens": [
+    { "name": "Call Logs / Smart Outreach - Dial tab", "route": "/call-logs" },
+    { "name": "Call Logs / Smart Outreach - History tab (Call Logs + SOP Documentation sub-tabs)", "route": "/call-logs" },
+    { "name": "Call Logs / Smart Outreach - Escalated tab", "route": "/call-logs" },
+    { "name": "Call Logs / Smart Outreach - Scheduler tab", "route": "/call-logs" },
+    { "name": "SOP Documentation Modal (overlay)", "route": "/call-logs" },
+    { "name": "Live Call HUD (fixed overlay, bottom-right)", "route": "/call-logs" },
+    { "name": "Email Modal (component, not currently mounted)", "route": "/call-logs" }
+  ],
+  "roles_and_access": "The /call-logs route is wrapped in ProtectedRoute requiredRole='admin'. hasRole(role) returns user?.role === role, so ONLY a user whose role is exactly 'admin' may render CallLogsPage; any other role (data_entry, viewer) sees a full-page 'Access Denied' message, and an unauthenticated user is redirected to /login. NOTE (defect): the DashboardLayout sidebar item {name:'Call Logs', href:'/call-logs', permission:null} is filtered by `!item.permission || hasPermission(item.permission)`; because permission is null the item is ALWAYS shown, so it is NOT hidden for non-admins (they see it but are blocked on click). API auth is inconsistent: /api/exotel/agents, /agent-status, /sop, /sop/history, /scheduler (all methods), /scheduler/auto-generate and /send-email require @jwt_required(); but /api/exotel/calls, /make-call, /call-status/<sid> and /inbound have NO JWT guard and are publicly reachable.",
+  "api_endpoints": [
+    { "method": "GET", "path": "/api/exotel/calls", "purpose": "List Exotel call logs; query params start_date, end_date. Returns {Calls:[...]}. NO JWT guard. 500 {error} on Exotel failure." },
+    { "method": "POST", "path": "/api/exotel/make-call", "purpose": "Initiate outbound call. Body {from,to,patient_name,provider_name}. 400 if from/to missing; passes through Exotel status (e.g. 403 invalid creds), 500 on request exception. NO JWT guard." },
+    { "method": "GET", "path": "/api/exotel/call-status/{call_sid}", "purpose": "Fetch live status of a call SID. Returns {Call:{Status,...}}. Passes through Exotel error code, else 500. NO JWT guard." },
+    { "method": "GET", "path": "/api/exotel/agents", "purpose": "List active providers joined with persistent on-duty status (is_on_duty mapped to active). JWT required (401 if missing). 200 array." },
+    { "method": "PUT", "path": "/api/exotel/agent-status", "purpose": "Set agent on-duty status. Body {provider_id,is_on_duty}. 400 if either missing; 200 on success. JWT required." },
+    { "method": "GET", "path": "/api/exotel/sop", "purpose": "List escalated SOP records. Returns {escalations:[...]}. JWT required. 200." },
+    { "method": "POST", "path": "/api/exotel/sop", "purpose": "Save SOP documentation for a call. Body is full SOP payload incl. patient_id, severity, escalate, etc. 201 on success. JWT required." },
+    { "method": "GET", "path": "/api/exotel/sop/history", "purpose": "Paginated SOP documentation history. Query start_date,end_date,page,per_page. Returns {items:[...],total}. JWT required. 200." },
+    { "method": "GET", "path": "/api/exotel/scheduler", "purpose": "List persistent scheduled outreach calls. Query start_date,end_date. Returns {schedule:[...]}. JWT required. 200." },
+    { "method": "POST", "path": "/api/exotel/scheduler", "purpose": "Add patient to outreach schedule. Body {patient_id,scheduled_date,notes}. 400 if patient_id or scheduled_date missing; 201 on success. JWT required." },
+    { "method": "DELETE", "path": "/api/exotel/scheduler/{schedule_id}", "purpose": "Remove a schedule record by UUID. 200 on success; 404 if not found; route expects a valid uuid (non-uuid path = 404 routing). JWT required." },
+    { "method": "POST", "path": "/api/exotel/scheduler/auto-generate", "purpose": "Auto-generate next-week outreach plan. No body. 201 on success. JWT required." },
+    { "method": "POST", "path": "/api/exotel/send-email", "purpose": "Send follow-up email to a patient. Body {patient_id,subject,body}. 400 if any missing; 404 if patient/email not found; 400 if no email on file; 500 if SMTP not configured; 200 on success. JWT required. (UI caller is orphaned — see defects.)" },
+    { "method": "GET/POST", "path": "/api/exotel/inbound", "purpose": "Exotel dynamic-routing webhook (server-to-server). Out of UI scope; listed for completeness." }
+  ],
+  "test_data_setup": [
+    "Admin user (role='admin') with valid credentials, e.g. admin@saranam.test, to access /call-logs.",
+    "A non-admin user (role='data_entry' or 'viewer') to verify Access Denied.",
+    "At least 12 patients so pagination (PER_PAGE=10) produces 2 pages. Include: a patient with NO last_call_date (expect 'NEVER CONTACTED'), one called today (expect 'CONTACTED TODAY'), one called ~3 days ago (expect 'SCHEDULED'), one called >7 days ago (expect 'OVERDUE - 7D+').",
+    "At least one patient WITH primary_caregiver_phone + primary_caregiver_name (e.g. Lakshmi Iyer, caregiver +91 98860 12345) to exercise the Call Options dropdown, and at least one WITHOUT a caregiver (single Call button).",
+    "A patient with a valid +91 mobile (e.g. Ramesh Kumar, +91 99000 11223) and one with NO phone on file to exercise the missing-number guard.",
+    "A patient with a valid email on file and one with NO email on file (for send-email 400/404 paths).",
+    "At least 2 active HealthcareProviders so the Staff Registry shows togglable agents; ensure at least one can be set On Duty.",
+    "Backend Exotel env vars (ACCOUNT_SID, API_KEY, API_TOKEN, EXOTEL_CALLER_ID): a valid set for happy path, plus a way to force a 403 (invalid API_KEY/API_TOKEN) to test the credential-error toast.",
+    "Pre-seed at least one escalated SOP record (escalate=true, severity 'high') and several non-escalated SOP records spanning the date range, for History/Escalated coverage.",
+    "Pre-seed at least one scheduler record (or add one during testing) to validate list, remove, and date display.",
+    "Browser DevTools Network + Console open for every API-level case; React error overlay enabled in non-prod to catch hook-order crashes."
+  ],
+  "test_cases": [
+    {
+      "id": "CL-001",
+      "section": "Permission & Access",
+      "title": "Admin can open /call-logs and lands on the Dial tab",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Logged in as admin user; at least 1 patient and 1 provider exist.",
+      "steps": [
+        "Log in as the admin user.",
+        "Navigate to https://saranam.fieldintel.ai/call-logs (or click the 'Call Logs' sidebar item).",
+        "Observe the page header and the active tab."
+      ],
+      "test_data": "admin@saranam.test",
+      "expected_result": "Page renders with title 'Smart Outreach' and subtitle 'Integrated patient communication hub and automated call history.'. The 'Dial' tab is active by default; Dial/History/Escalated/Scheduler toggle buttons are visible; the Staff Registry sidebar is shown.",
+      "api_reference": "GET /api/exotel/agents"
+    },
+    {
+      "id": "CL-002",
+      "section": "Permission & Access",
+      "title": "Non-admin user is blocked from /call-logs (Access Denied)",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Logged in as a non-admin user (role data_entry or viewer).",
+      "steps": [
+        "Log in as a non-admin user.",
+        "Manually navigate to /call-logs via the URL bar.",
+        "Observe the rendered content."
+      ],
+      "test_data": "viewer@saranam.test (role=viewer)",
+      "expected_result": "ProtectedRoute renders a full-page 'Access Denied' message ('You don't have permission to access this page.'); CallLogsPage and its API calls do NOT execute.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-003",
+      "section": "Permission & Access",
+      "title": "'Call Logs' sidebar item visibility for a non-admin (KNOWN DEFECT)",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "Logged in as a non-admin user; DashboardLayout sidebar visible.",
+      "steps": [
+        "Log in as a non-admin user (viewer/data_entry).",
+        "Open the left navigation sidebar.",
+        "Look for the 'Call Logs' menu item.",
+        "Click it if present."
+      ],
+      "test_data": "viewer@saranam.test",
+      "expected_result": "EXPECTED PER REQUIREMENT: the 'Call Logs' item should be hidden for non-admins. ACTUAL (defect): the nav entry has permission:null and is filtered by `!item.permission || hasPermission(...)`, so it is ALWAYS shown; the non-admin sees 'Call Logs' and on click reaches the 'Access Denied' page. Log as FAIL and reference DEF-CL-01.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-004",
+      "section": "Permission & Access",
+      "title": "Unauthenticated user is redirected to /login",
+      "priority": "High",
+      "type": "Permission",
+      "preconditions": "No active session (localStorage cleared of access_token/user).",
+      "steps": [
+        "Clear site data / log out so there is no user in context.",
+        "Navigate directly to /call-logs."
+      ],
+      "test_data": "N/A",
+      "expected_result": "ProtectedRoute sees no user and redirects (Navigate replace) to /login. CallLogsPage does not render.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-005",
+      "section": "Permission & Access",
+      "title": "Expired access token on a guarded call triggers refresh then retry",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "Logged in as admin; access_token expired but a valid refresh_token present.",
+      "steps": [
+        "Set access_token in localStorage to an expired/invalid token, keep a valid refresh_token.",
+        "Open /call-logs (triggers GET /api/exotel/agents).",
+        "Watch the Network tab."
+      ],
+      "test_data": "N/A",
+      "expected_result": "First agents call returns 401; client posts /auth/refresh with the refresh token, stores the new access_token, and retries the original request which now succeeds (200). Staff Registry populates without forcing logout.",
+      "api_reference": "GET /api/exotel/agents"
+    },
+    {
+      "id": "CL-006",
+      "section": "Permission & Access",
+      "title": "Failed token refresh on 401 logs the user out to /login",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "Logged in as admin; both access_token and refresh_token invalid/expired.",
+      "steps": [
+        "Invalidate both access_token and refresh_token in localStorage.",
+        "Open /call-logs.",
+        "Observe redirect behaviour."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Guarded call returns 401, refresh attempt fails, client clears access_token/refresh_token/user from localStorage and redirects to /login.",
+      "api_reference": "GET /api/exotel/agents"
+    },
+    {
+      "id": "CL-007",
+      "section": "Dial - Outreach Queue",
+      "title": "Dial tab loads the priority outreach queue with patients and pagination footer",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Admin on /call-logs, >10 patients seeded.",
+      "steps": [
+        "Open the Dial tab.",
+        "Observe the 'Patients' card titled 'Priority Outreach Queue'.",
+        "Read the footer 'Showing X to Y of Z' text."
+      ],
+      "test_data": "12 seeded patients",
+      "expected_result": "GET /api/patients (page=1, per_page=10, search='') is called; up to 10 patient rows render with name, patient phone, last sync date and a status badge; footer reads 'Showing 1 to 10 of 12'; Next enabled, Previous disabled on page 1.",
+      "api_reference": "GET /api/patients?page=1&per_page=10"
+    },
+    {
+      "id": "CL-008",
+      "section": "Dial - Outreach Queue",
+      "title": "Queue sorts by outreach priority (overdue > never > scheduled > recent)",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Patients seeded with varied last_call_date values as per test data setup.",
+      "steps": [
+        "Open the Dial tab.",
+        "Inspect the order of the patient rows and their badges."
+      ],
+      "test_data": "Patients with last_call_date = none / today / 3 days ago / 8 days ago",
+      "expected_result": "Rows are ordered so OVERDUE - 7D+ appears first, then NEVER CONTACTED, then SCHEDULED, then CONTACTED TODAY (client-side sort by getCallStatus priority {overdue:3, never:2, scheduled:1, recent:0}).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-009",
+      "section": "Dial - Outreach Queue",
+      "title": "Patient status badges render correctly for each call-recency bucket",
+      "priority": "Medium",
+      "type": "UI/UX",
+      "preconditions": "Patients seeded per CL-008.",
+      "steps": [
+        "Open the Dial tab.",
+        "Match each patient row's badge against its last_call_date."
+      ],
+      "test_data": "Same as CL-008",
+      "expected_result": "No last_call_date -> 'NEVER CONTACTED' (amber). <1 day -> 'CONTACTED TODAY' (emerald). 1-7 days -> 'SCHEDULED' (blue). >7 days -> 'OVERDUE - 7D+' (red, pulsing). Last Sync shows the formatted date or 'None'.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-010",
+      "section": "Dial - Outreach Queue",
+      "title": "Patient search filters the queue (debounced) by name",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Admin on Dial tab; patient 'Ramesh Kumar' exists.",
+      "steps": [
+        "Type 'Ramesh' into the 'Search patient or phone...' box.",
+        "Wait ~300ms and observe the Network tab and the list."
+      ],
+      "test_data": "Search term: Ramesh",
+      "expected_result": "After the 300ms debounce a single GET /api/patients call fires with search=Ramesh; the list updates to matching patients. (Note: results are additionally filtered client-side by name/phone via sortedPatients.)",
+      "api_reference": "GET /api/patients?search=Ramesh"
+    },
+    {
+      "id": "CL-011",
+      "section": "Dial - Outreach Queue",
+      "title": "Patient search by phone substring filters the visible rows",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Admin on Dial tab; a patient with phone +91 99000 11223 exists.",
+      "steps": [
+        "Type '99000' into the search box.",
+        "Observe the filtered rows."
+      ],
+      "test_data": "Search term: 99000",
+      "expected_result": "Rows are filtered to patients whose phone contains '99000' (client-side sortedPatients filter on p.phone). Non-matching rows are hidden.",
+      "api_reference": "GET /api/patients?search=99000"
+    },
+    {
+      "id": "CL-012",
+      "section": "Dial - Outreach Queue",
+      "title": "Outreach queue pagination Next/Previous navigates pages",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Admin on Dial tab; 12 patients (2 pages).",
+      "steps": [
+        "On page 1, click 'Next' in the queue footer.",
+        "Observe the list and footer.",
+        "Click 'Previous'."
+      ],
+      "test_data": "12 patients, PER_PAGE 10",
+      "expected_result": "Next sets patientPage=2 -> GET /api/patients?page=2; footer reads 'Showing 11 to 12 of 12'; Next is disabled on the last page; Previous returns to page 1.",
+      "api_reference": "GET /api/patients?page=2&per_page=10"
+    },
+    {
+      "id": "CL-013",
+      "section": "Dial - Outreach Queue",
+      "title": "Empty outreach queue shows 'No patients found.'",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "Admin on Dial tab; search yields zero patients.",
+      "steps": [
+        "Type a string matching no patient, e.g. 'zzzzqqq'.",
+        "Wait for the list to settle."
+      ],
+      "test_data": "Search term: zzzzqqq",
+      "expected_result": "The queue body shows the italic empty message 'No patients found.' and no patient rows; footer count reflects 0.",
+      "api_reference": "GET /api/patients?search=zzzzqqq"
+    },
+    {
+      "id": "CL-014",
+      "section": "Dial - Outreach Queue",
+      "title": "Loading skeleton displays while patients are being fetched",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Admin; throttle network to Slow 3G in DevTools.",
+      "steps": [
+        "Throttle the network.",
+        "Switch to / refresh the Dial tab.",
+        "Observe the Patients card during loading."
+      ],
+      "test_data": "N/A",
+      "expected_result": "While patientsLoading is true the CallLogCard renders skeleton placeholders (title/description/300px body skeleton) instead of rows; rows appear once data resolves.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "CL-015",
+      "section": "Dial - Outreach Queue",
+      "title": "Patients fetch failure shows 'Sync Failed' destructive toast",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Admin on Dial tab; force GET /api/patients to return 500 (e.g. block the endpoint).",
+      "steps": [
+        "Force the patients endpoint to error (DevTools request block or backend down).",
+        "Open / refresh the Dial tab."
+      ],
+      "test_data": "N/A",
+      "expected_result": "A destructive toast 'Sync Failed - Could not retrieve patients.' is shown; the queue does not crash and shows the empty state.",
+      "api_reference": "GET /api/patients"
+    },
+    {
+      "id": "CL-016",
+      "section": "Dial - Outreach Queue",
+      "title": "Caregiver patient shows 'Call Options' dropdown with Patient and Caregiver",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Admin on Dial tab; patient with primary_caregiver_phone exists; at least one On Duty staff.",
+      "steps": [
+        "Locate the caregiver-enabled patient row (caregiver phone shown in blue).",
+        "Click the 'Call Options' button.",
+        "Inspect the dropdown menu."
+      ],
+      "test_data": "Lakshmi Iyer, caregiver +91 98860 12345",
+      "expected_result": "A dropdown opens with label 'Select Contact', a 'Call Patient' item (patient phone) and a 'Call Caregiver' item (caregiver phone + name). Patients with no caregiver render a single 'Call' button instead.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-017",
+      "section": "Dial - Outreach Queue",
+      "title": "Schedule-for-later popover requires a date before Confirm is enabled",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "Admin on Dial tab.",
+      "steps": [
+        "Click the amber calendar button on a patient row.",
+        "Observe the 'Confirm Schedule' button before picking a date.",
+        "Pick a future date, then observe the button."
+      ],
+      "test_data": "Date: 2026-06-10",
+      "expected_result": "'Confirm Schedule' is disabled until a date is selected; once a date is chosen it becomes enabled. Confirming triggers the add-to-schedule flow (CL-046) and resets the temp date.",
+      "api_reference": "POST /api/exotel/scheduler"
+    },
+    {
+      "id": "CL-018",
+      "section": "Staff Registry Sidebar",
+      "title": "Staff Registry loads agents with On Duty/Off and 'Ready' count",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Admin on Dial tab; >=2 active providers.",
+      "steps": [
+        "Observe the right-hand 'Staff Registry - Active care providers' card.",
+        "Read each agent's status chip and the header 'X Ready' badge."
+      ],
+      "test_data": "2 providers",
+      "expected_result": "GET /api/exotel/agents returns providers; each renders initial avatar, name, 'On Duty'/'Off' chip and (if applicable) 'Busy'; header badge shows count of agents that are active AND not busy.",
+      "api_reference": "GET /api/exotel/agents"
+    },
+    {
+      "id": "CL-019",
+      "section": "Staff Registry Sidebar",
+      "title": "Toggle an agent On Duty persists via PUT and updates optimistically",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Admin on Dial tab; agent currently Off.",
+      "steps": [
+        "Click the toggle (PhoneForwarded) button on an Off agent.",
+        "Observe the chip and the 'Ready' count.",
+        "Check the Network tab for the PUT call and payload."
+      ],
+      "test_data": "provider_id of the chosen agent",
+      "expected_result": "Chip flips to 'On Duty' immediately (optimistic); PUT /api/exotel/agent-status fires with body {provider_id, is_on_duty:true} and returns 200; 'Ready' count increments.",
+      "api_reference": "PUT /api/exotel/agent-status"
+    },
+    {
+      "id": "CL-020",
+      "section": "Staff Registry Sidebar",
+      "title": "Agent-status PUT failure reverts the optimistic toggle",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Admin on Dial tab; force PUT /api/exotel/agent-status to 500.",
+      "steps": [
+        "Block / fail the agent-status endpoint in DevTools.",
+        "Toggle an agent's duty status.",
+        "Observe the chip after the request fails."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Chip first flips optimistically then reverts to its previous state when the PUT rejects; no crash. (Note: no error toast is shown on this path — confirm chip reversion only.)",
+      "api_reference": "PUT /api/exotel/agent-status"
+    },
+    {
+      "id": "CL-021",
+      "section": "Staff Registry Sidebar",
+      "title": "All staff off/busy shows 'Full busy / offline' warning",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Admin on Dial tab; at least one agent exists but none are available.",
+      "steps": [
+        "Toggle all agents to Off (or ensure all are busy).",
+        "Observe the bottom of the Staff Registry."
+      ],
+      "test_data": "N/A",
+      "expected_result": "When availableCount is 0 but agents exist, the amber 'Full busy / offline' banner is shown and the header badge reads '0 Ready'.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-022",
+      "section": "Staff Registry Sidebar",
+      "title": "No staff returns empty registry message",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "Admin on Dial tab; no active providers in DB.",
+      "steps": [
+        "Open the Dial tab with zero active providers.",
+        "Observe the Staff Registry body."
+      ],
+      "test_data": "N/A",
+      "expected_result": "The registry shows the empty state 'No staff members found.' with a user icon; header badge reads '0 Ready'.",
+      "api_reference": "GET /api/exotel/agents"
+    },
+    {
+      "id": "CL-023",
+      "section": "Staff Registry Sidebar",
+      "title": "Staff Registry client-side pagination",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Admin on Dial tab; >10 active providers.",
+      "steps": [
+        "Observe 'Page 1 / N' footer.",
+        "Click 'Next', then 'Previous'."
+      ],
+      "test_data": "11 providers",
+      "expected_result": "Agents are paginated client-side (slice of 10); footer shows correct page; Previous disabled on page 1, Next disabled on the last page. No new network call (agents already in memory).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-024",
+      "section": "Initiate Call (Exotel)",
+      "title": "Initiate a call to a patient with an available agent succeeds",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Admin on Dial tab; at least one On Duty + not-busy agent; patient with a valid +91 number; valid Exotel creds.",
+      "steps": [
+        "Ensure one agent is On Duty.",
+        "Click 'Call' (or 'Call Patient' from the dropdown) on a patient with a phone number.",
+        "Observe the toast, the button label, the Live HUD and the Network tab."
+      ],
+      "test_data": "Patient Ramesh Kumar +91 99000 11223",
+      "expected_result": "POST /api/exotel/make-call fires with {from: agent clean phone, to: patient clean phone, patient_name, provider_name}; a 'Call Initiated' toast appears; the agent becomes Busy; a Live Session appears in the Call HUD; on a returned Sid the button reads 'Connected'.",
+      "api_reference": "POST /api/exotel/make-call"
+    },
+    {
+      "id": "CL-025",
+      "section": "Initiate Call (Exotel)",
+      "title": "Call blocked when no staff are On Duty",
+      "priority": "High",
+      "type": "Negative",
+      "preconditions": "Admin on Dial tab; all agents Off (or busy).",
+      "steps": [
+        "Ensure no agent is available.",
+        "Click 'Call' on any patient."
+      ],
+      "test_data": "N/A",
+      "expected_result": "No make-call request is sent; a destructive toast 'Staff Offline - Please set at least one staff member to On Duty in the sidebar before calling.' is shown.",
+      "api_reference": "N/A (guard before POST /api/exotel/make-call)"
+    },
+    {
+      "id": "CL-026",
+      "section": "Initiate Call (Exotel)",
+      "title": "Call blocked when the target patient has no phone number",
+      "priority": "High",
+      "type": "Negative",
+      "preconditions": "Admin on Dial tab; one agent On Duty; a patient with no phone on file.",
+      "steps": [
+        "Click 'Call' on the patient that has no phone.",
+        "Observe the toast."
+      ],
+      "test_data": "Patient with no phone/contact",
+      "expected_result": "No make-call request; destructive toast 'Missing Number - Could not find phone number for Target.' is shown (and 'Staff' if the agent number is missing).",
+      "api_reference": "N/A (guard before POST /api/exotel/make-call)"
+    },
+    {
+      "id": "CL-027",
+      "section": "Initiate Call (Exotel)",
+      "title": "Initiate a call to the caregiver number from the dropdown",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Admin on Dial tab; agent On Duty; caregiver-enabled patient.",
+      "steps": [
+        "Open 'Call Options' on the caregiver patient.",
+        "Click 'Call Caregiver'.",
+        "Inspect the make-call payload."
+      ],
+      "test_data": "Lakshmi Iyer, caregiver +91 98860 12345",
+      "expected_result": "POST /api/exotel/make-call uses the caregiver's cleaned phone as 'to'; the HUD session name reflects the caregiver/target name; patient_name in the payload is still the patient's full_name.",
+      "api_reference": "POST /api/exotel/make-call"
+    },
+    {
+      "id": "CL-028",
+      "section": "Initiate Call (Exotel)",
+      "title": "Exotel 403 (invalid credentials) shows Authentication Failed toast",
+      "priority": "High",
+      "type": "Negative",
+      "preconditions": "Admin on Dial tab; agent On Duty; backend Exotel API_KEY/API_TOKEN invalid.",
+      "steps": [
+        "Click 'Call' on a valid patient.",
+        "Observe the toast and Network response."
+      ],
+      "test_data": "Invalid Exotel creds",
+      "expected_result": "make-call passes through a 403 from Exotel; UI shows destructive toast 'Authentication Failed - Exotel credentials (API Key/Token) are invalid. Please check your configuration.'; the agent's busy flag is cleared and the temp session is removed.",
+      "api_reference": "POST /api/exotel/make-call"
+    },
+    {
+      "id": "CL-029",
+      "section": "Initiate Call (Exotel)",
+      "title": "Generic make-call failure (500) shows Dial Error and clears session",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Admin on Dial tab; agent On Duty; force make-call to return 500.",
+      "steps": [
+        "Force the make-call endpoint to 500.",
+        "Click 'Call' on a valid patient.",
+        "Observe the toast and the HUD."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Destructive toast 'Dial Error' with the error message (fallback 'Failed to connect call via Exotel.'); the optimistic Live Session is removed and the agent is no longer Busy.",
+      "api_reference": "POST /api/exotel/make-call"
+    },
+    {
+      "id": "CL-030",
+      "section": "Initiate Call (Exotel)",
+      "title": "make-call request omitting from/to is rejected (400) by backend",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "Tooling to POST directly (Postman/curl) to the backend.",
+      "steps": [
+        "POST /api/exotel/make-call with body {} (no from/to).",
+        "Inspect the response."
+      ],
+      "test_data": "Body: {}",
+      "expected_result": "Backend returns 400 with {\"error\":\"Missing from or to number\"}.",
+      "api_reference": "POST /api/exotel/make-call"
+    },
+    {
+      "id": "CL-031",
+      "section": "Initiate Call (Exotel)",
+      "title": "Re-clicking Call on an already-dialing patient is prevented",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "Admin; a call is already initiated for a patient (HUD session active).",
+      "steps": [
+        "Initiate a call on a patient.",
+        "Attempt to click the same patient's call button again while it shows 'Dialing...'/'Connected'."
+      ],
+      "test_data": "N/A",
+      "expected_result": "The button is disabled (isCalling true) and shows a spinner with 'Dialing...' then 'Connected'; no duplicate make-call is sent for that patient.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-032",
+      "section": "Live Call HUD",
+      "title": "Call HUD appears with active sessions and collapses/expands",
+      "priority": "Medium",
+      "type": "UI/UX",
+      "preconditions": "Admin; at least one active call session.",
+      "steps": [
+        "Initiate a call so a session is active.",
+        "Observe the fixed bottom-right HUD header 'Live Sessions (N)'.",
+        "Click the chevron to collapse, then expand."
+      ],
+      "test_data": "N/A",
+      "expected_result": "HUD shows a pulsing green dot and 'Live Sessions (1)'; each row shows patient/target name and 'with <first agent name>'. Chevron toggles the body open/closed. With zero sessions the HUD is not rendered.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-033",
+      "section": "Live Call HUD",
+      "title": "End Session from the HUD frees the agent and removes the session",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Admin; an active call session in the HUD; agent marked Busy.",
+      "steps": [
+        "In the HUD, click the red X 'End Session' on the session.",
+        "Observe the HUD, the toast and the agent's Busy chip."
+      ],
+      "test_data": "N/A",
+      "expected_result": "The session is removed from the HUD; toast 'Call Session Ended - You are now available for new calls.'; the associated agent's Busy flag clears (becomes available again).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-034",
+      "section": "Live Call HUD",
+      "title": "Document (SOP) button in HUD opens the SOP modal pre-filled",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Admin; an active session in the HUD.",
+      "steps": [
+        "Click the clipboard 'Document Call (SOP)' icon on a HUD session.",
+        "Observe the SOP modal."
+      ],
+      "test_data": "N/A",
+      "expected_result": "The SOP Documentation modal opens with Patient Name pre-filled from the session and editable SOP fields (see CL-037).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-035",
+      "section": "Live Call HUD",
+      "title": "Call-status polling auto-ends a session on terminal status",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Admin; an active session that has a returned Exotel Sid.",
+      "steps": [
+        "Initiate a call that returns a Sid.",
+        "Have the call reach a terminal status (completed/failed/busy/no-answer/canceled) on the Exotel side.",
+        "Wait up to ~5s and observe the HUD."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Every 5s the UI polls GET /api/exotel/call-status/<sid>; when the returned Status is terminal the session is auto-ended (removed from HUD, agent freed). Failed status checks are swallowed silently.",
+      "api_reference": "GET /api/exotel/call-status/{call_sid}"
+    },
+    {
+      "id": "CL-036",
+      "section": "Live Call HUD",
+      "title": "Dialing session auto-clears after 30s if it never connects",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "Admin; a make-call that never transitions to in-progress (no Sid).",
+      "steps": [
+        "Initiate a call where no Sid/in-progress status is returned.",
+        "Wait ~30 seconds without acting.",
+        "Observe the HUD and the agent status."
+      ],
+      "test_data": "N/A",
+      "expected_result": "After 30s the unconnected session is removed and the agent's Busy flag is cleared automatically (per the setTimeout cleanup). A session already 'in-progress' is left intact.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-037",
+      "section": "SOP Documentation Modal",
+      "title": "Open SOP modal from a queue row and verify all fields",
+      "priority": "High",
+      "type": "UI/UX",
+      "preconditions": "Admin on Dial tab.",
+      "steps": [
+        "Click the clipboard 'Manual Documentation' button on a patient row.",
+        "Inspect every field in the modal."
+      ],
+      "test_data": "Any patient",
+      "expected_result": "Modal 'Call Documentation / SOP Compliance Form' opens. Patient Name is disabled/pre-filled; editable fields: Staff/Clinician Name, Staff Phone No., Patient Phone Number, Relation (self/spouse/child/sibling/caregiver/other), Severity (low/medium/high/critical), Reason, Symptoms, Advice, Internal Notes, and an 'Flag for Roster Lead Escalation' checkbox. Close (X) and 'Save Documentation' buttons present.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-038",
+      "section": "SOP Documentation Modal",
+      "title": "Save SOP documentation persists and shows success toast",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Admin; SOP modal open for a known patient.",
+      "steps": [
+        "Fill Staff Name, Reason ('Fever follow-up'), Severity 'medium', Symptoms, Advice.",
+        "Click 'Save Documentation'.",
+        "Inspect the toast and the POST payload."
+      ],
+      "test_data": "Staff: Nurse Priya; Reason: Fever follow-up; Severity: medium",
+      "expected_result": "POST /api/exotel/sop fires with the full sopData plus patient_id from selectedCall; returns 201; toast 'SOP Saved - Documentation has been persisted to the patient record.'; modal closes.",
+      "api_reference": "POST /api/exotel/sop"
+    },
+    {
+      "id": "CL-039",
+      "section": "SOP Documentation Modal",
+      "title": "Save SOP with the escalate flag checked refreshes the Escalated list",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "Admin; SOP modal open; severity high.",
+      "steps": [
+        "Set Severity 'high', tick 'Flag for Roster Lead Escalation', add a Reason.",
+        "Click 'Save Documentation'.",
+        "Switch to the Escalated tab."
+      ],
+      "test_data": "Severity: high; escalate: true; Reason: Severe breathlessness",
+      "expected_result": "POST /api/exotel/sop succeeds; after save the app calls GET /api/exotel/sop (escalations) again; the new escalation appears in the Escalated tab with red severity bar and 'high priority' badge.",
+      "api_reference": "POST /api/exotel/sop ; GET /api/exotel/sop"
+    },
+    {
+      "id": "CL-040",
+      "section": "SOP Documentation Modal",
+      "title": "SOP save failure shows destructive toast with status code",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Admin; SOP modal open; force POST /api/exotel/sop to 500.",
+      "steps": [
+        "Force the SOP endpoint to error.",
+        "Fill the form and click 'Save Documentation'."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Destructive toast 'Save Failed (500)' (or the returned code) with the backend error message or fallback 'Could not save SOP documentation.'; the modal remains open so data is not lost.",
+      "api_reference": "POST /api/exotel/sop"
+    },
+    {
+      "id": "CL-041",
+      "section": "SOP Documentation Modal",
+      "title": "SOP free-text fields accept long text and special characters",
+      "priority": "Low",
+      "type": "Validation",
+      "preconditions": "Admin; SOP modal open.",
+      "steps": [
+        "Paste a 2000+ character string into Symptoms and Internal Notes.",
+        "Enter special characters & non-Latin script in Reason (e.g. 'Fever <>&\\\"' and 'காய்ச்சல்').",
+        "Save and re-open via History > SOP Documentation > View Details."
+      ],
+      "test_data": "Long Lorem text; Reason: Fever <>&\\\" காய்ச்சல்",
+      "expected_result": "Long text and special/Unicode characters are accepted, saved (no truncation error, no script injection), and render correctly when viewed; no XSS executes.",
+      "api_reference": "POST /api/exotel/sop"
+    },
+    {
+      "id": "CL-042",
+      "section": "SOP Documentation Modal",
+      "title": "Close / X dismisses the SOP modal without saving",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Admin; SOP modal open with edits.",
+      "steps": [
+        "Enter some text in Reason.",
+        "Click the header X (and separately the footer 'Close').",
+        "Confirm no save occurred."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Either control closes the modal; no POST /api/exotel/sop is sent; the entered data is discarded (modal state resets on next open).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-043",
+      "section": "History - Call Logs",
+      "title": "History tab loads Exotel call logs and stat cards",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Admin; Exotel returns calls for the default range (last 1 month).",
+      "steps": [
+        "Click the 'History' tab.",
+        "Observe the four stat cards and the Call Logs sub-tab list."
+      ],
+      "test_data": "Default range: last 1 month",
+      "expected_result": "GET /api/exotel/calls is called with start_date/end_date; stat cards show Total Volume, Inbound, Outbound, Failed/Missed (failed counts statuses failed/no-answer/busy). The CallLogs list renders one card per call with From -> To, date, duration, and a status badge.",
+      "api_reference": "GET /api/exotel/calls"
+    },
+    {
+      "id": "CL-044",
+      "section": "History - Call Logs",
+      "title": "Call log status badge colours map correctly",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Admin; calls with mixed statuses (completed/busy/failed/no-answer).",
+      "steps": [
+        "On the History > Call Logs sub-tab, inspect each call card's status badge."
+      ],
+      "test_data": "Calls with statuses completed/busy/failed/no-answer",
+      "expected_result": "completed -> green, busy -> amber, failed -> red, no-answer -> gray; an unknown status falls back to the muted/secondary style.",
+      "api_reference": "GET /api/exotel/calls"
+    },
+    {
+      "id": "CL-045",
+      "section": "History - Call Logs",
+      "title": "Call recording player renders only when a RecordingUrl exists",
+      "priority": "Low",
+      "type": "UI/UX",
+      "preconditions": "Admin; at least one call with RecordingUrl and one without.",
+      "steps": [
+        "Locate a call card that has a recording and one that does not.",
+        "Verify the audio player presence and that it plays."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Cards with RecordingUrl show a 'Recording' label and an HTML5 audio player that streams the source; cards without a recording show no player.",
+      "api_reference": "GET /api/exotel/calls"
+    },
+    {
+      "id": "CL-046",
+      "section": "History - Call Logs",
+      "title": "Date-range filter re-queries call logs",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Admin on History tab.",
+      "steps": [
+        "Open the DateRangePicker and select a narrower custom range.",
+        "Observe the Network call and the refreshed list/stats."
+      ],
+      "test_data": "Range: 2026-05-01 to 2026-05-15",
+      "expected_result": "GET /api/exotel/calls fires with the new start_date/end_date (ISO); both the stat cards and the call list refresh to reflect that window.",
+      "api_reference": "GET /api/exotel/calls"
+    },
+    {
+      "id": "CL-047",
+      "section": "History - Call Logs",
+      "title": "Refresh button re-fetches the active History sub-tab",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Admin on History tab.",
+      "steps": [
+        "Click the refresh (RefreshCw) icon button.",
+        "Observe the spinner and the Network tab."
+      ],
+      "test_data": "N/A",
+      "expected_result": "On the Call Logs sub-tab it re-calls GET /api/exotel/calls (stat refresh); on the SOP sub-tab it re-calls GET /api/exotel/sop/history. The icon animates (spins) while loading.",
+      "api_reference": "GET /api/exotel/calls"
+    },
+    {
+      "id": "CL-048",
+      "section": "History - Call Logs",
+      "title": "Empty call history shows 'No call logs found'",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "Admin; choose a range with no calls (e.g. far-future window).",
+      "steps": [
+        "Select a date range with no calls.",
+        "Observe the Call Logs list."
+      ],
+      "test_data": "Range: 2030-01-01 to 2030-01-02",
+      "expected_result": "The list shows the dashed empty card 'No call logs found' with the phone icon and helper text; stat cards read 0.",
+      "api_reference": "GET /api/exotel/calls"
+    },
+    {
+      "id": "CL-049",
+      "section": "History - Call Logs",
+      "title": "Call logs fetch error shows connection alert",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Admin on History tab; force GET /api/exotel/calls to fail.",
+      "steps": [
+        "Block / fail the calls endpoint.",
+        "Open / refresh the Call Logs sub-tab."
+      ],
+      "test_data": "N/A",
+      "expected_result": "A destructive Alert 'Unable to connect to the call server. Please check your connection.' is shown inside the CallLogs list; the page does not crash.",
+      "api_reference": "GET /api/exotel/calls"
+    },
+    {
+      "id": "CL-050",
+      "section": "History - Call Logs",
+      "title": "Export button generates a call-history export for the range",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Admin on History tab with data in range.",
+      "steps": [
+        "Click the Export button.",
+        "Observe the produced export/download."
+      ],
+      "test_data": "Current range",
+      "expected_result": "The ExportButton receives exportData {summary: stats, range, message} and viewType 'call_history' and produces an export reflecting the current date range summary. (No new Exotel call required for the summary export.)",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-051",
+      "section": "History - SOP Documentation",
+      "title": "SOP Documentation sub-tab lists paginated records",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Admin on History tab; >10 SOP records in range.",
+      "steps": [
+        "Switch the History sub-tab to 'SOP Documentation'.",
+        "Observe the list, record count footer and pagination."
+      ],
+      "test_data": "12 SOP records",
+      "expected_result": "GET /api/exotel/sop/history?page=1&per_page=10 is called; up to 10 cards show patient name, 'By: <staff>', patient number, created date and a quoted reason; footer 'Showing 10 of 12'; Next enabled. Escalated records show a red 'Escalated' badge.",
+      "api_reference": "GET /api/exotel/sop/history"
+    },
+    {
+      "id": "CL-052",
+      "section": "History - SOP Documentation",
+      "title": "SOP history pagination Next/Previous",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Admin on SOP Documentation sub-tab; 12 records.",
+      "steps": [
+        "Click 'Next'.",
+        "Observe the page change and Network call.",
+        "Click 'Previous'."
+      ],
+      "test_data": "12 records",
+      "expected_result": "Next sets sopPage=2 -> GET /api/exotel/sop/history?page=2; Previous disabled on page 1; Next disabled when sopPage*per_page >= total.",
+      "api_reference": "GET /api/exotel/sop/history"
+    },
+    {
+      "id": "CL-053",
+      "section": "History - SOP Documentation",
+      "title": "Empty SOP history shows 'No documentation found'",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "Admin; date range with no SOP records.",
+      "steps": [
+        "Select a range with no SOP entries and open the SOP Documentation sub-tab.",
+        "Observe the body."
+      ],
+      "test_data": "Empty range",
+      "expected_result": "Dashed empty card 'No documentation found - Stored SOP forms for the selected period will appear here.' is shown.",
+      "api_reference": "GET /api/exotel/sop/history"
+    },
+    {
+      "id": "CL-054",
+      "section": "History - SOP Documentation",
+      "title": "View Details opens the SOP modal pre-filled from the record",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Admin; at least one SOP record listed.",
+      "steps": [
+        "Click 'View Details' on an SOP card.",
+        "Inspect the modal contents."
+      ],
+      "test_data": "Existing SOP record",
+      "expected_result": "The SOP modal opens populated with the stored record's fields (patientName from sop.patient.full_name and the persisted reason/severity/etc.), allowing review.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-055",
+      "section": "History - SOP Documentation",
+      "title": "SOP history fetch error shows destructive toast",
+      "priority": "Low",
+      "type": "Negative",
+      "preconditions": "Admin; force GET /api/exotel/sop/history to fail.",
+      "steps": [
+        "Block the sop/history endpoint.",
+        "Open the SOP Documentation sub-tab."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Destructive toast 'History Sync Failed - Could not retrieve documentation history.' is shown; no crash.",
+      "api_reference": "GET /api/exotel/sop/history"
+    },
+    {
+      "id": "CL-056",
+      "section": "Escalated",
+      "title": "Escalated tab lists persisted escalations with severity colour bar",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Admin; >=1 escalated SOP record seeded.",
+      "steps": [
+        "Click the 'Escalated' tab.",
+        "Inspect the escalation card(s)."
+      ],
+      "test_data": "1 high-severity escalation",
+      "expected_result": "GET /api/exotel/sop is called; each escalation renders patient name, severity badge, staff name/number, patient caller number, relative time, quoted reason and symptoms; the left colour bar is red(high)/amber(medium)/emerald(else).",
+      "api_reference": "GET /api/exotel/sop"
+    },
+    {
+      "id": "CL-057",
+      "section": "Escalated",
+      "title": "Empty escalations show 'No pending escalations'",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "Admin; no escalated records.",
+      "steps": [
+        "Open the Escalated tab with no escalations.",
+        "Observe the body."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Dashed empty card 'No pending escalations - Calls flagged for Lead review will appear here.' is shown.",
+      "api_reference": "GET /api/exotel/sop"
+    },
+    {
+      "id": "CL-058",
+      "section": "Escalated",
+      "title": "HomeCare button removes the escalation from the list (client stub)",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Admin; >=1 escalation listed.",
+      "steps": [
+        "Click the 'HomeCare' button on an escalation card.",
+        "Observe the toast and the list, and the Network tab."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Success toast 'Escalated to HomeCare - A new visit request has been added to the HomeCare queue.'; the card is removed from the local list. NOTE (defect/limitation): handleEscalateToHomeCare is a client-only stub (TODO) — NO backend API call is made, so the change is not persisted and reappears on refresh. Reference DEF-CL-05.",
+      "api_reference": "N/A (no API call — client stub)"
+    },
+    {
+      "id": "CL-059",
+      "section": "Escalated",
+      "title": "Follow Up popover schedules the escalation's patient",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Admin; >=1 escalation with a patient_id.",
+      "steps": [
+        "Click 'Follow Up' on an escalation card.",
+        "Pick a date in the calendar and click 'Confirm Schedule'.",
+        "Inspect the Network call and toast."
+      ],
+      "test_data": "Date: 2026-06-12",
+      "expected_result": "POST /api/exotel/scheduler fires with {patient_id, scheduled_date (ISO), notes}; success toast 'Added to Schedule'; the schedule list refreshes (visible on the Scheduler tab).",
+      "api_reference": "POST /api/exotel/scheduler"
+    },
+    {
+      "id": "CL-060",
+      "section": "Escalated",
+      "title": "Dismiss for now removes an escalation from the view only",
+      "priority": "Low",
+      "type": "Edge Case",
+      "preconditions": "Admin; >=1 escalation listed.",
+      "steps": [
+        "Click 'Dismiss for now' on an escalation.",
+        "Refresh the Escalated tab."
+      ],
+      "test_data": "N/A",
+      "expected_result": "The card disappears from the current view with no API call; after a refresh (re-fetch of GET /api/exotel/sop) the escalation reappears (dismiss is client-only / non-persistent).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-061",
+      "section": "Scheduler",
+      "title": "Scheduler tab loads the persistent outreach schedule",
+      "priority": "High",
+      "type": "Functional",
+      "preconditions": "Admin; >=1 schedule record exists.",
+      "steps": [
+        "Click the 'Scheduler' tab.",
+        "Observe the 'Your Outreach Schedule' list and count."
+      ],
+      "test_data": "1 schedule record",
+      "expected_result": "GET /api/exotel/scheduler is called; each record shows patient initial avatar, name, phone and 'Scheduled: <relative date>'; the count line reads 'N patients scheduled for follow-up.'",
+      "api_reference": "GET /api/exotel/scheduler"
+    },
+    {
+      "id": "CL-062",
+      "section": "Scheduler",
+      "title": "Empty schedule shows 'No calls scheduled'",
+      "priority": "Medium",
+      "type": "Edge Case",
+      "preconditions": "Admin; no schedule records.",
+      "steps": [
+        "Open the Scheduler tab with no records.",
+        "Observe the body."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Dashed empty card 'No calls scheduled - Add patients from the Dial tab to build your outreach plan.' is shown along with the Generate/Add Manually buttons.",
+      "api_reference": "GET /api/exotel/scheduler"
+    },
+    {
+      "id": "CL-063",
+      "section": "Scheduler",
+      "title": "Add patient to schedule from the Dial tab persists",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "Admin on Dial tab.",
+      "steps": [
+        "Open a patient's schedule calendar (amber button) and pick a future date, confirm.",
+        "Switch to the Scheduler tab.",
+        "Inspect the Network call and the list."
+      ],
+      "test_data": "Patient Ramesh Kumar; Date 2026-06-15",
+      "expected_result": "POST /api/exotel/scheduler fires with {patient_id, scheduled_date (ISO), notes:'Scheduled from Outreach Management'} returning 201; success toast 'Added to Schedule'; the new record appears in the Scheduler list after fetchSchedule.",
+      "api_reference": "POST /api/exotel/scheduler"
+    },
+    {
+      "id": "CL-064",
+      "section": "Scheduler",
+      "title": "Remove a scheduled record deletes it from the list",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "Admin on Scheduler tab; >=1 record.",
+      "steps": [
+        "Click the X 'Remove from Schedule' on a record.",
+        "Observe the toast, the list, and the Network call."
+      ],
+      "test_data": "schedule_id (uuid) of the record",
+      "expected_result": "DELETE /api/exotel/scheduler/<uuid> returns 200; success toast 'Removed - Record removed from schedule.'; the record is removed from the list and stays removed after refresh.",
+      "api_reference": "DELETE /api/exotel/scheduler/{schedule_id}"
+    },
+    {
+      "id": "CL-065",
+      "section": "Scheduler",
+      "title": "Remove schedule failure shows destructive toast",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "Admin; force DELETE /api/exotel/scheduler to fail.",
+      "steps": [
+        "Block / fail the delete endpoint.",
+        "Click X on a schedule record."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Destructive toast 'Action Failed - Could not remove from schedule.'; the record remains in the list.",
+      "api_reference": "DELETE /api/exotel/scheduler/{schedule_id}"
+    },
+    {
+      "id": "CL-066",
+      "section": "Scheduler",
+      "title": "Generate Weekly Plan auto-generates the schedule",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "Admin on Scheduler tab.",
+      "steps": [
+        "Click 'Generate Weekly Plan'.",
+        "Observe the spinner, toast and refreshed list."
+      ],
+      "test_data": "N/A",
+      "expected_result": "POST /api/exotel/scheduler/auto-generate returns 201; success toast 'Plan Generated - Automatic outreach plan for next week has been created.'; fetchSchedule re-runs and the list updates.",
+      "api_reference": "POST /api/exotel/scheduler/auto-generate"
+    },
+    {
+      "id": "CL-067",
+      "section": "Scheduler",
+      "title": "Auto-generate failure shows destructive toast",
+      "priority": "Low",
+      "type": "Negative",
+      "preconditions": "Admin; force auto-generate to fail.",
+      "steps": [
+        "Block / fail the auto-generate endpoint.",
+        "Click 'Generate Weekly Plan'."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Destructive toast 'Generation Failed - Could not automatically generate the schedule.'; spinner stops.",
+      "api_reference": "POST /api/exotel/scheduler/auto-generate"
+    },
+    {
+      "id": "CL-068",
+      "section": "Scheduler",
+      "title": "'Add Manually' switches to the Dial tab; manual SOP from a schedule row opens the modal",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "Admin on Scheduler tab; >=1 record.",
+      "steps": [
+        "Click 'Add Manually' and confirm the tab switch.",
+        "Return to Scheduler and click the clipboard (Manual Documentation) icon on a record."
+      ],
+      "test_data": "N/A",
+      "expected_result": "'Add Manually' sets the active tab to Dial. The clipboard icon on a schedule record opens the SOP modal pre-filled with that record's patient.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-069",
+      "section": "Scheduler",
+      "title": "Backend rejects schedule add missing patient_id or scheduled_date (400)",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "Tooling to POST directly with a valid JWT.",
+      "steps": [
+        "POST /api/exotel/scheduler with body {notes:'x'} (no patient_id/scheduled_date).",
+        "Inspect the response."
+      ],
+      "test_data": "Body: {\"notes\":\"x\"}",
+      "expected_result": "Backend returns 400 {\"error\":\"patient_id and scheduled_date are required\"}.",
+      "api_reference": "POST /api/exotel/scheduler"
+    },
+    {
+      "id": "CL-070",
+      "section": "Scheduler",
+      "title": "Delete with a non-existent / non-UUID schedule id",
+      "priority": "Low",
+      "type": "Negative",
+      "preconditions": "Tooling to DELETE directly with a valid JWT.",
+      "steps": [
+        "DELETE /api/exotel/scheduler/00000000-0000-0000-0000-000000000000 (valid uuid, no record).",
+        "Then DELETE /api/exotel/scheduler/not-a-uuid.",
+        "Inspect both responses."
+      ],
+      "test_data": "Valid-but-absent uuid; then 'not-a-uuid'",
+      "expected_result": "Absent uuid -> 404 {\"error\":\"Schedule not found\"} (or 200 no-op depending on service). Non-uuid path does not match the <uuid:...> route converter and returns a 404 routing error.",
+      "api_reference": "DELETE /api/exotel/scheduler/{schedule_id}"
+    },
+    {
+      "id": "CL-071",
+      "section": "Email Modal",
+      "title": "EmailModal composes a pre-filled follow-up email (component-level)",
+      "priority": "Medium",
+      "type": "UI/UX",
+      "preconditions": "EmailModal mounted with a patient (NOTE: not currently wired into CallLogsPage — see DEF-CL-02; test via a mount harness/storybook or after wiring).",
+      "steps": [
+        "Open the Email modal for a patient.",
+        "Inspect the Subject and Message Body defaults."
+      ],
+      "test_data": "Patient Lakshmi Iyer",
+      "expected_result": "Title 'Send Email'; Subject defaults to 'Follow-up: Outreach from Saranam'; Body is pre-filled greeting the patient by full_name; both fields editable.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-072",
+      "section": "Email Modal",
+      "title": "Send Email is disabled when subject or body is empty",
+      "priority": "Medium",
+      "type": "Validation",
+      "preconditions": "EmailModal open (per CL-071 caveat).",
+      "steps": [
+        "Clear the Subject field entirely and observe the Send button.",
+        "Restore Subject, clear the Body, observe again.",
+        "Enter whitespace-only into Subject and observe."
+      ],
+      "test_data": "Empty / whitespace-only subject and body",
+      "expected_result": "'Send Email' is disabled while !subject.trim() or !body.trim() (whitespace-only also disables it). Re-enabled once both contain non-whitespace text.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-073",
+      "section": "Email Modal",
+      "title": "Send Email posts to backend and closes on success",
+      "priority": "Medium",
+      "type": "Functional",
+      "preconditions": "EmailModal open (per CL-071); patient has an email on file; onSend wired to callLogsApi.sendEmail.",
+      "steps": [
+        "Edit subject/body and click 'Send Email'.",
+        "Inspect the Network call and modal behaviour."
+      ],
+      "test_data": "Subject: Follow-up; Body: short message",
+      "expected_result": "POST /api/exotel/send-email fires with {patient_id, subject, body}; on 200 {message:'Email sent successfully'} the modal closes (onClose). During send the button shows 'Sending...' and Cancel/Send are disabled.",
+      "api_reference": "POST /api/exotel/send-email"
+    },
+    {
+      "id": "CL-074",
+      "section": "Email Modal",
+      "title": "Send Email to a patient with no email on file returns 400",
+      "priority": "Medium",
+      "type": "Negative",
+      "preconditions": "EmailModal open for a patient with NO email; onSend wired.",
+      "steps": [
+        "Click 'Send Email'.",
+        "Inspect the Network response and console."
+      ],
+      "test_data": "Patient with no email on file",
+      "expected_result": "POST /api/exotel/send-email returns 400 {\"error\":\"Patient has no email address on file\"} (or 404 if patient not found). The component logs 'Failed to send email' and the modal stays open (does not close on error).",
+      "api_reference": "POST /api/exotel/send-email"
+    },
+    {
+      "id": "CL-075",
+      "section": "Email Modal",
+      "title": "Send Email when SMTP is not configured returns 500",
+      "priority": "Low",
+      "type": "Negative",
+      "preconditions": "Backend SMTP settings absent; EmailModal open for a patient WITH an email.",
+      "steps": [
+        "Click 'Send Email'.",
+        "Inspect the Network response."
+      ],
+      "test_data": "Patient with valid email; SMTP unset",
+      "expected_result": "POST /api/exotel/send-email returns 500 {\"error\":\"SMTP settings not configured\"}; modal stays open; the send button re-enables (loading reset).",
+      "api_reference": "POST /api/exotel/send-email"
+    },
+    {
+      "id": "CL-076",
+      "section": "Email Modal",
+      "title": "Cancel closes the Email modal without sending",
+      "priority": "Low",
+      "type": "Functional",
+      "preconditions": "EmailModal open with edits.",
+      "steps": [
+        "Edit the body, then click 'Cancel' (and separately press Esc / click outside).",
+        "Confirm no send occurred."
+      ],
+      "test_data": "N/A",
+      "expected_result": "The modal closes via onClose; no POST /api/exotel/send-email is sent; reopening resets the subject/body to defaults (via the open/patient effect).",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-077",
+      "section": "Email Modal",
+      "title": "EmailModal hook-order crash when patient toggles null/non-null (KNOWN DEFECT)",
+      "priority": "High",
+      "type": "Edge Case",
+      "preconditions": "EmailModal mounted; ability to pass patient as null then non-null (or vice versa).",
+      "steps": [
+        "Render EmailModal with patient=null (early return null fires before the useEffect hook).",
+        "Then re-render with a non-null patient so the useEffect now runs.",
+        "Watch the React console / error overlay."
+      ],
+      "test_data": "N/A",
+      "expected_result": "EXPECTED: clean render. ACTUAL (defect): `if (!patient) return null;` sits BEFORE the useEffect, violating the Rules of Hooks; React throws 'Rendered more hooks than during the previous render' when patient transitions from null to a value. Log as FAIL and reference DEF-CL-03.",
+      "api_reference": "N/A"
+    },
+    {
+      "id": "CL-078",
+      "section": "API & Security",
+      "title": "Guarded endpoints reject requests without a JWT (401)",
+      "priority": "High",
+      "type": "API",
+      "preconditions": "Tooling to call the backend with no Authorization header.",
+      "steps": [
+        "Call GET /api/exotel/agents, GET /api/exotel/sop, GET /api/exotel/sop/history, GET /api/exotel/scheduler, POST /api/exotel/send-email each WITHOUT a Bearer token.",
+        "Inspect each response."
+      ],
+      "test_data": "No Authorization header",
+      "expected_result": "Each returns 401 Unauthorized (JWT required). In the browser this triggers the client refresh-then-redirect flow.",
+      "api_reference": "GET /api/exotel/agents (+ other @jwt_required endpoints)"
+    },
+    {
+      "id": "CL-079",
+      "section": "API & Security",
+      "title": "Telephony endpoints are publicly reachable without JWT (KNOWN DEFECT)",
+      "priority": "High",
+      "type": "API",
+      "preconditions": "Tooling to call the backend with no Authorization header.",
+      "steps": [
+        "Call GET /api/exotel/calls with no token.",
+        "Call POST /api/exotel/make-call with {from,to} and no token.",
+        "Call GET /api/exotel/call-status/<sid> with no token.",
+        "Inspect responses."
+      ],
+      "test_data": "No Authorization header",
+      "expected_result": "EXPECTED: these should require admin auth like the rest of the module. ACTUAL (defect): /api/exotel/calls, /make-call and /call-status/<sid> have NO @jwt_required guard and respond without authentication (an unauthenticated party could read call logs or place Exotel calls). Log as FAIL and reference DEF-CL-04.",
+      "api_reference": "GET /api/exotel/calls ; POST /api/exotel/make-call ; GET /api/exotel/call-status/{sid}"
+    },
+    {
+      "id": "CL-080",
+      "section": "API & Security",
+      "title": "agent-status PUT validates required body fields (400)",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "Tooling to PUT with a valid JWT.",
+      "steps": [
+        "PUT /api/exotel/agent-status with body {} (no provider_id/is_on_duty).",
+        "Inspect the response."
+      ],
+      "test_data": "Body: {}",
+      "expected_result": "Backend returns 400 {\"error\":\"Missing provider_id or is_on_duty\"}.",
+      "api_reference": "PUT /api/exotel/agent-status"
+    },
+    {
+      "id": "CL-081",
+      "section": "API & Security",
+      "title": "send-email validates required body fields (400)",
+      "priority": "Medium",
+      "type": "API",
+      "preconditions": "Tooling to POST with a valid JWT.",
+      "steps": [
+        "POST /api/exotel/send-email with body {patient_id:'x'} (no subject/body).",
+        "Inspect the response."
+      ],
+      "test_data": "Body: {\"patient_id\":\"x\"}",
+      "expected_result": "Backend returns 400 {\"error\":\"patient_id, subject, and body are required\"}.",
+      "api_reference": "POST /api/exotel/send-email"
+    },
+    {
+      "id": "CL-082",
+      "section": "Data Integrity",
+      "title": "A saved SOP appears in SOP history and the patient record",
+      "priority": "High",
+      "type": "Data Integrity",
+      "preconditions": "Admin; SOP saved for a known patient (CL-038).",
+      "steps": [
+        "Save an SOP for patient Ramesh Kumar with a distinct reason.",
+        "Go to History > SOP Documentation and locate the record.",
+        "(If accessible) open the patient's record in the Patients module to confirm linkage."
+      ],
+      "test_data": "Reason: 'Integrity-check 0601'",
+      "expected_result": "The newly saved SOP appears in GET /api/exotel/sop/history for the current range with the correct patient name, staff and reason; the record is tied to the patient_id sent on save.",
+      "api_reference": "POST /api/exotel/sop ; GET /api/exotel/sop/history"
+    },
+    {
+      "id": "CL-083",
+      "section": "Data Integrity",
+      "title": "Removing a schedule item keeps it gone after a full page reload",
+      "priority": "Medium",
+      "type": "Data Integrity",
+      "preconditions": "Admin; >=1 schedule record (CL-064 just removed one).",
+      "steps": [
+        "Remove a schedule record on the Scheduler tab.",
+        "Hard-reload the page and return to the Scheduler tab.",
+        "Confirm the record is absent."
+      ],
+      "test_data": "N/A",
+      "expected_result": "After DELETE and a fresh GET /api/exotel/scheduler the removed record does not reappear (deletion is persisted server-side), unlike the client-only Dismiss in CL-060.",
+      "api_reference": "DELETE /api/exotel/scheduler/{schedule_id} ; GET /api/exotel/scheduler"
+    },
+    {
+      "id": "CL-084",
+      "section": "Data Integrity",
+      "title": "Tab data is scoped/loaded only for the active tab",
+      "priority": "Low",
+      "type": "Data Integrity",
+      "preconditions": "Admin on /call-logs; Network tab open.",
+      "steps": [
+        "Watch the Network tab while clicking through Dial -> History -> Escalated -> Scheduler.",
+        "Confirm which fetches fire per tab."
+      ],
+      "test_data": "N/A",
+      "expected_result": "Dial fetches patients + agents; History (calls sub-tab) fetches exotel/calls; History (docs sub-tab) fetches sop/history; Escalated fetches exotel/sop; Scheduler fetches exotel/scheduler. Inactive-tab fetches are guarded (return early) so they do not fire.",
+      "api_reference": "Multiple (see endpoints table)"
+    }
+  ]
+}

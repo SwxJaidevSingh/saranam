@@ -1,0 +1,72 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Database dumps / backups (contain production data — never commit)
+backups/
+*.sql.gz
+
+# db backup files
+*.db
+*.sql
+*.dump
+*.backup
+
+# Duplicate frontend directory (should be at root level)
+backend/frontend/
+
+# Build outputs
+dist/
+build/
+*.pyc
+__pycache__/
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql
+*.backup
+
+# Python virtual environment
+venv/
+env/
+ENV/
+.venv/
+frontend/.env
+
+# Testing
+coverage/
+.coverage
+.pytest_cache/
+
+# Misc
+.DS_Store
+
+# Claude Code local settings + agent worktrees (machine-specific)
+.claude/
+
+scheduling/

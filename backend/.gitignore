@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+
+# Flask
+instance/
+.webassets-cache
+
+# Environment files (IMPORTANT: Never commit these!)
+.env
+.env.production
+.env.local
+.env.*.local
+.env.supabase
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Migrations backup
+migrations_backup/
+
+# Logs
+*.log
+
+# Backups
+backups/
+
+# Uploads
+uploads/
+
+*.xlsx
+geocode_excel.py
+geocode_patients.py

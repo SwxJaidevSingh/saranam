@@ -1,0 +1,789 @@
+"""Home Care Service Layer — Business logic for Home Care visit management."""
+
+import math
+from datetime import datetime, date
+from typing import Optional, List, Dict, Tuple
+from uuid import UUID, uuid4
+from sqlalchemy import and_, func, desc
+from sqlalchemy.orm import joinedload
+from sqlalchemy.orm.attributes import flag_modified
+
+from app.extensions import db
+from app.encounters.models import Encounter
+from app.patients.models import Patient
+from app.providers.models import HealthcareProvider
+from app.ipd.models import VitalsRecord
+from app.diagnoses.models import Diagnosis
+from app.opd.models import (
+    OPDPrescription, OPDPrescriptionItem,
+    OPDLabOrder, OPDLabOrderItem,
+    PrescriptionStatus, LabOrderStatus, LabUrgency
+)
+
+
+# ---------------------------------------------------------------------------
+# Haversine distance calculation
+# ---------------------------------------------------------------------------
+
+def haversine(lat1, lon1, lat2, lon2):
+    """Calculate the distance in meters between two GPS coordinates."""
+    R = 6371000  # Earth radius in meters
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+# ---------------------------------------------------------------------------
+# Home Care Visit Service
+# ---------------------------------------------------------------------------
+
+class HomeCareVisitService:
+
+    @staticmethod
+    def create_visit(
+        patient_id: UUID,
+        provider_id: Optional[UUID],
+        start_time: str,
+        duration: Optional[int],
+        chief_complaint: Optional[str],
+        notes: Optional[str],
+        booked_by_id: UUID
+    ) -> dict:
+        """Book a new Home Care appointment / visit."""
+        from datetime import timedelta
+
+        normalized = start_time.replace('Z', '+00:00')
+        if 'T' in normalized and normalized.count(':') == 1:
+            normalized += ':00'
+        start_dt = datetime.fromisoformat(normalized)
+        dur = duration or 60
+        end_dt = start_dt + timedelta(minutes=dur)
+
+        patient = db.session.query(Patient).filter(Patient.id == patient_id).first()
+        if not patient:
+            raise ValueError('Patient not found')
+
+        if provider_id:
+            provider = db.session.query(HealthcareProvider).filter(
+                HealthcareProvider.id == provider_id
+            ).first()
+            if not provider:
+                raise ValueError('Provider not found')
+
+        visit = Encounter(
+            id=uuid4(),
+            patient_id=patient_id,
+            provider_id=provider_id,
+            encounter_type='HOME_CARE',
+            appointment_type='consultation',
+            start_time=start_dt,
+            end_time=end_dt,
+            status='scheduled',
+            chief_complaint=chief_complaint,
+            pre_appointment_notes=notes,
+            booking_source='homecare_module',
+            booked_by=booked_by_id,
+            created_by=booked_by_id
+        )
+
+        db.session.add(visit)
+        db.session.commit()
+
+        return HomeCareVisitService._format_visit(visit)
+
+    @staticmethod
+    def get_visit(visit_id: UUID) -> Optional[dict]:
+        """Get full Home Care visit detail."""
+        visit = db.session.query(Encounter).options(
+            joinedload(Encounter.patient),
+            joinedload(Encounter.provider)
+        ).filter(
+            Encounter.id == visit_id,
+            Encounter.encounter_type == 'HOME_CARE'
+        ).first()
+
+        if not visit:
+            return None
+
+        data = HomeCareVisitService._format_visit(visit)
+
+        # Attach vitals
+        vitals = db.session.query(VitalsRecord).filter(
+            VitalsRecord.encounter_id == visit_id
+        ).order_by(desc(VitalsRecord.recorded_at)).first()
+        data['vitals'] = [vitals.to_dict()] if vitals else []
+
+        # Attach diagnoses
+        diagnoses = db.session.query(Diagnosis).filter(
+            Diagnosis.encounter_id == visit_id
+        ).all()
+        data['diagnoses'] = [d.to_dict() for d in diagnoses]
+
+        # Attach prescription
+        prescription = db.session.query(OPDPrescription).options(
+            joinedload(OPDPrescription.items)
+        ).filter(OPDPrescription.encounter_id == visit_id).first()
+        data['prescription'] = prescription.to_dict() if prescription else None
+
+        # Attach lab order
+        lab_order = db.session.query(OPDLabOrder).options(
+            joinedload(OPDLabOrder.items)
+        ).filter(OPDLabOrder.encounter_id == visit_id).first()
+        data['lab_order'] = lab_order.to_dict() if lab_order else None
+
+        return data
+
+    @staticmethod
+    def list_visits(
+        patient_id: Optional[str] = None,
+        provider_id: Optional[str] = None,
+        status: Optional[str] = None,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0
+    ) -> Tuple[List[dict], int]:
+        """List Home Care visits with filters."""
+        query = db.session.query(Encounter).options(
+            joinedload(Encounter.patient),
+            joinedload(Encounter.provider)
+        ).filter(Encounter.encounter_type == 'HOME_CARE')
+
+        if patient_id:
+            query = query.filter(Encounter.patient_id == UUID(patient_id))
+        if provider_id:
+            query = query.filter(Encounter.provider_id == UUID(provider_id))
+        if status:
+            query = query.filter(Encounter.status == status)
+        if from_date:
+            from_dt = datetime.fromisoformat(from_date.replace('Z', '+00:00'))
+            query = query.filter(Encounter.start_time >= from_dt)
+        if to_date:
+            to_dt = datetime.fromisoformat(to_date.replace('Z', '+00:00'))
+            query = query.filter(Encounter.start_time <= to_dt)
+
+        total = query.count()
+        visits = query.order_by(desc(Encounter.start_time)).limit(limit).offset(offset).all()
+
+        return [HomeCareVisitService._format_visit(v) for v in visits], total
+
+    @staticmethod
+    def get_queue(queue_date: Optional[str] = None) -> List[dict]:
+        """Get today's Home Care queue grouped by status."""
+        target_date = date.today()
+        if queue_date:
+            target_date = date.fromisoformat(queue_date)
+
+        day_start = datetime.combine(target_date, datetime.min.time())
+        day_end = datetime.combine(target_date, datetime.max.time())
+
+        visits = db.session.query(Encounter).options(
+            joinedload(Encounter.patient),
+            joinedload(Encounter.provider)
+        ).filter(
+            Encounter.encounter_type == 'HOME_CARE',
+            Encounter.start_time >= day_start,
+            Encounter.start_time <= day_end
+        ).order_by(Encounter.start_time).all()
+
+        return [HomeCareVisitService._format_visit(v) for v in visits]
+
+    @staticmethod
+    def get_dashboard_stats() -> dict:
+        """Get Home Care dashboard statistics for today."""
+        today_start = datetime.combine(date.today(), datetime.min.time())
+        today_end = datetime.combine(date.today(), datetime.max.time())
+
+        def _count(status=None):
+            q = db.session.query(func.count(Encounter.id)).filter(
+                Encounter.encounter_type == 'HOME_CARE',
+                Encounter.start_time >= today_start,
+                Encounter.start_time <= today_end
+            )
+            if status:
+                q = q.filter(Encounter.status == status)
+            return q.scalar() or 0
+
+        total_today = _count()
+        scheduled = _count('scheduled')
+        checked_in = _count('checked_in')
+        in_consultation = _count('in_consultation')
+        completed = _count('completed')
+        no_show = _count('no_show')
+
+        total_all = db.session.query(func.count(Encounter.id)).filter(
+            Encounter.encounter_type == 'HOME_CARE'
+        ).scalar() or 0
+
+        return {
+            'today': {
+                'total': total_today,
+                'scheduled': scheduled,
+                'checked_in': checked_in,
+                'in_consultation': in_consultation,
+                'completed': completed,
+                'no_show': no_show,
+            },
+            'total_all_time': total_all,
+            'date': date.today().isoformat()
+        }
+
+    @staticmethod
+    def check_in(visit_id: UUID) -> Optional[dict]:
+        """Check in patient — transitions scheduled -> checked_in."""
+        visit = HomeCareVisitService._get_encounter(visit_id)
+        if not visit:
+            return None
+
+        if visit.status not in ('scheduled', 'confirmed'):
+            raise ValueError(f'Cannot check in from status: {visit.status}')
+
+        visit.status = 'checked_in'
+        visit.checked_in_at = datetime.utcnow()
+        db.session.commit()
+        return HomeCareVisitService._format_visit(visit)
+
+    @staticmethod
+    def mark_no_show(visit_id: UUID) -> Optional[dict]:
+        """Mark patient as no-show."""
+        visit = HomeCareVisitService._get_encounter(visit_id)
+        if not visit:
+            return None
+
+        if visit.status == 'completed':
+            raise ValueError('Cannot mark completed visit as no-show')
+
+        visit.status = 'no_show'
+        db.session.commit()
+        return HomeCareVisitService._format_visit(visit)
+
+    @staticmethod
+    def update_provider(visit_id: UUID, provider_id: UUID) -> Optional[dict]:
+        """Reassign provider for a Home Care visit."""
+        visit = HomeCareVisitService._get_encounter(visit_id)
+        if not visit:
+            return None
+
+        provider = db.session.query(HealthcareProvider).filter(
+            HealthcareProvider.id == provider_id
+        ).first()
+        if not provider:
+            raise ValueError('Provider not found')
+
+        visit.provider_id = provider_id
+        db.session.commit()
+        return HomeCareVisitService._format_visit(visit)
+
+    @staticmethod
+    def complete_visit(
+        visit_id: UUID,
+        follow_up_required: bool = False,
+        follow_up_date: Optional[str] = None,
+        referral_service: Optional[str] = None,
+        final_notes: Optional[str] = None
+    ) -> Optional[dict]:
+        """Complete a Home Care visit."""
+        visit = HomeCareVisitService._get_encounter(visit_id)
+        if not visit:
+            return None
+
+        visit.status = 'completed'
+        visit.checked_out_at = datetime.utcnow()
+        visit.follow_up_required = follow_up_required
+
+        if follow_up_date:
+            visit.follow_up_scheduled_at = datetime.fromisoformat(follow_up_date.replace('Z', '+00:00'))
+
+        if final_notes:
+            visit.post_appointment_notes = final_notes
+
+        if referral_service:
+            existing_meta = visit.service_metadata or {}
+            existing_meta['referral_service'] = referral_service
+            visit.service_metadata = existing_meta
+
+        db.session.commit()
+        return HomeCareVisitService._format_visit(visit)
+
+    # ---- GPS-specific methods ----
+
+    @staticmethod
+    def gps_check_in(visit_id, provider_lat, provider_lng):
+        """GPS-based check-in. Verifies provider is within 500m of patient."""
+        visit = db.session.query(Encounter).options(
+            joinedload(Encounter.patient),
+            joinedload(Encounter.provider)
+        ).filter(
+            Encounter.id == visit_id,
+            Encounter.encounter_type == 'HOME_CARE'
+        ).first()
+
+        if not visit:
+            return None, 'Home Care visit not found'
+
+        patient = visit.patient
+        patient_meta = patient.external_metadata or {}
+        patient_lat = patient_meta.get('latitude')
+        patient_lng = patient_meta.get('longitude')
+
+        distance = None
+        if patient_lat is not None and patient_lng is not None:
+            distance = haversine(provider_lat, provider_lng, float(patient_lat), float(patient_lng))
+            if distance > 500:  # meters
+                return None, f'Too far from patient ({int(distance)}m). Must be within 500m.'
+
+        # Record check-in
+        visit.checked_in_at = datetime.utcnow()
+        visit.status = 'checked_in'
+
+        # Store GPS data in service_metadata
+        meta = visit.service_metadata or {}
+        meta['gps_checkin'] = {
+            'provider_lat': provider_lat,
+            'provider_lng': provider_lng,
+            'patient_lat': patient_lat,
+            'patient_lng': patient_lng,
+            'distance_meters': round(distance, 1) if distance is not None else None,
+            'checked_in_at': datetime.utcnow().isoformat()
+        }
+        visit.service_metadata = meta
+        flag_modified(visit, 'service_metadata')
+
+        db.session.commit()
+        return HomeCareVisitService._format_visit(visit), None
+
+    @staticmethod
+    def save_patient_location(patient_id, latitude, longitude, address=None):
+        """Save patient's GPS coordinates."""
+        patient = db.session.query(Patient).filter(Patient.id == patient_id).first()
+        if not patient:
+            return None
+        meta = patient.external_metadata or {}
+        meta['latitude'] = latitude
+        meta['longitude'] = longitude
+        if address:
+            meta['gps_address'] = address
+        patient.external_metadata = meta
+        flag_modified(patient, 'external_metadata')
+        db.session.commit()
+        return True
+
+    @staticmethod
+    def get_patient_location(patient_id):
+        """Get patient's GPS coordinates."""
+        patient = db.session.query(Patient).filter(Patient.id == patient_id).first()
+        if not patient:
+            return None
+        meta = patient.external_metadata or {}
+        return {
+            'latitude': meta.get('latitude'),
+            'longitude': meta.get('longitude'),
+            'address': meta.get('gps_address')
+        }
+
+    # ---- Internal helpers ----
+
+    @staticmethod
+    def _get_encounter(visit_id: UUID) -> Optional[Encounter]:
+        return db.session.query(Encounter).filter(
+            Encounter.id == visit_id,
+            Encounter.encounter_type == 'HOME_CARE'
+        ).first()
+
+    @staticmethod
+    def _format_visit(visit: Encounter) -> dict:
+        data = visit.to_dict()
+        if visit.patient:
+            data['patient_name'] = visit.patient.full_name
+            data['patient_gender'] = visit.patient.gender
+            data['patient_dob'] = visit.patient.date_of_birth.isoformat() if visit.patient.date_of_birth else None
+            # Include patient location data
+            patient_meta = visit.patient.external_metadata or {}
+            data['patient_latitude'] = patient_meta.get('latitude')
+            data['patient_longitude'] = patient_meta.get('longitude')
+            data['patient_gps_address'] = patient_meta.get('gps_address')
+        if visit.provider:
+            data['provider_name'] = visit.provider.full_name
+            data['provider_specialization'] = visit.provider.specialization
+            data['provider_license_number'] = visit.provider.license_number
+            data['provider_qualification'] = visit.provider.qualification
+        return data
+
+
+# ---------------------------------------------------------------------------
+# Vitals Service
+# ---------------------------------------------------------------------------
+
+class HomeCareVitalsService:
+
+    @staticmethod
+    def save_vitals(
+        visit_id: UUID,
+        patient_id: UUID,
+        vitals_data: dict,
+        recorded_by_id: UUID,
+        assessment_data: dict = None,
+        visit_summary: str = None
+    ) -> dict:
+        """Save or update vitals + nursing assessment for a Home Care visit."""
+        weight = vitals_data.get('weight')
+        height = vitals_data.get('height')
+        if weight and height and height > 0:
+            height_m = height / 100
+            vitals_data['bmi'] = round(weight / (height_m ** 2), 1)
+
+        is_critical = HomeCareVitalsService._check_critical(vitals_data)
+
+        if visit_summary is None and assessment_data:
+            visit_summary = HomeCareVitalsService._generate_visit_summary(vitals_data, assessment_data)
+
+        existing = db.session.query(VitalsRecord).filter(
+            VitalsRecord.encounter_id == visit_id
+        ).first()
+
+        if existing:
+            existing.vitals_data = vitals_data
+            existing.assessment_data = assessment_data
+            existing.visit_summary = visit_summary
+            existing.recorded_at = datetime.utcnow()
+            existing.recorded_by = recorded_by_id
+            existing.is_critical = is_critical
+            record = existing
+        else:
+            record = VitalsRecord(
+                id=uuid4(),
+                encounter_id=visit_id,
+                patient_id=patient_id,
+                vitals_data=vitals_data,
+                assessment_data=assessment_data,
+                visit_summary=visit_summary,
+                recorded_at=datetime.utcnow(),
+                recorded_by=recorded_by_id,
+                is_critical=is_critical
+            )
+            db.session.add(record)
+
+        visit = db.session.query(Encounter).filter(Encounter.id == visit_id).first()
+        if visit and visit.status == 'checked_in':
+            visit.status = 'vitals_recorded'
+
+        db.session.commit()
+        return record.to_dict()
+
+    @staticmethod
+    def _generate_visit_summary(vitals: dict, assessment: dict) -> str:
+        """Auto-generate a human-readable visit summary from assessment data."""
+        parts = []
+        gpe = assessment.get('general_physical_exam', {})
+        if gpe:
+            state = gpe.get('state_of_patient', '')
+            orientation = gpe.get('orientation', '')
+            adl = gpe.get('adl', '')
+            if state:
+                parts.append(f"Patient is {state}, {orientation}, ADL: {adl}")
+
+        bp_s = vitals.get('blood_pressure_systolic') or vitals.get('bp_systolic')
+        bp_d = vitals.get('blood_pressure_diastolic') or vitals.get('bp_diastolic')
+        pulse = vitals.get('pulse')
+        spo2 = vitals.get('oxygen_saturation') or vitals.get('spo2')
+        temp = vitals.get('temperature')
+        grbs = vitals.get('grbs')
+        v_parts = []
+        if bp_s and bp_d:
+            v_parts.append(f"BP {bp_s}/{bp_d}")
+        if pulse:
+            v_parts.append(f"PR {pulse}")
+        if spo2:
+            v_parts.append(f"SpO2 {spo2}%")
+        if temp:
+            v_parts.append(f"Temp {temp}")
+        if grbs:
+            v_parts.append(f"GRBS {grbs}")
+        if v_parts:
+            parts.append("Vitals: " + ", ".join(v_parts))
+
+        pain = assessment.get('pain_assessment', {})
+        if pain.get('score') is not None and pain['score'] > 0:
+            parts.append(f"Pain score: {pain['score']}/10")
+            if pain.get('description'):
+                parts[-1] += f" ({pain['description']})"
+
+        symptoms = assessment.get('symptom_assessment', {})
+        active = []
+        for key in ['nausea_vomiting', 'wound', 'dyspnea', 'lymphoedema', 'bed_sore']:
+            val = symptoms.get(key, '')
+            if val and val not in ('none', 'None', '', False):
+                active.append(key.replace('_', ' ').title())
+        if symptoms.get('feeding_tubes'):
+            active.append('Feeding Tubes')
+        if symptoms.get('urinary_catheter'):
+            active.append('Urinary Catheter')
+        if symptoms.get('tracheostomy'):
+            active.append('Tracheostomy')
+        if active:
+            parts.append("Active symptoms: " + ", ".join(active))
+
+        return ". ".join(parts) + "." if parts else ""
+
+    @staticmethod
+    def get_vitals(visit_id: UUID) -> Optional[dict]:
+        record = db.session.query(VitalsRecord).filter(
+            VitalsRecord.encounter_id == visit_id
+        ).first()
+        return record.to_dict() if record else None
+
+    @staticmethod
+    def _check_critical(vitals: dict) -> bool:
+        thresholds = {
+            'bp_systolic': (60, 180),
+            'bp_diastolic': (40, 120),
+            'temperature': (35.0, 40.0),
+            'heart_rate': (40, 140),
+            'spo2': (85, 100),
+        }
+        for key, (lo, hi) in thresholds.items():
+            val = vitals.get(key)
+            if val is not None:
+                if val < lo or val > hi:
+                    return True
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Home Care Assessment Service
+# ---------------------------------------------------------------------------
+
+class HomeCareAssessmentService:
+
+    @staticmethod
+    def save_assessment(visit_id: UUID, assessment_data: dict) -> Optional[dict]:
+        """Save home care clinical / caretaker assessment (stored in encounter.service_metadata)."""
+        visit = db.session.query(Encounter).filter(
+            Encounter.id == visit_id,
+            Encounter.encounter_type == 'HOME_CARE'
+        ).first()
+        if not visit:
+            return None
+
+        meta = visit.service_metadata or {}
+        meta['homecare_assessment'] = assessment_data
+        visit.service_metadata = meta
+        flag_modified(visit, 'service_metadata')
+
+        if visit.status in ('checked_in', 'vitals_recorded'):
+            visit.status = 'in_consultation'
+
+        db.session.commit()
+        return HomeCareVisitService._format_visit(visit)
+
+    @staticmethod
+    def get_assessment(visit_id: UUID) -> Optional[dict]:
+        visit = db.session.query(Encounter).filter(Encounter.id == visit_id).first()
+        if not visit:
+            return None
+        meta = visit.service_metadata or {}
+        return meta.get('homecare_assessment', {})
+
+
+# ---------------------------------------------------------------------------
+# Diagnosis Service
+# ---------------------------------------------------------------------------
+
+class HomeCareDiagnosisService:
+
+    @staticmethod
+    def save_diagnoses(
+        visit_id: UUID,
+        patient_id: UUID,
+        diagnoses_data: List[dict],
+        diagnosed_by_id: UUID
+    ) -> List[dict]:
+        """Replace all diagnoses for a visit."""
+        db.session.query(Diagnosis).filter(
+            Diagnosis.encounter_id == visit_id
+        ).delete()
+
+        saved = []
+        for item in diagnoses_data:
+            diagnosis = Diagnosis(
+                id=uuid4(),
+                encounter_id=visit_id,
+                patient_id=patient_id,
+                diagnosis_text=item['diagnosis_text'],
+                icd10_code=item.get('icd10_code'),
+                diagnosis_type=item.get('diagnosis_type', 'primary'),
+                severity=item.get('severity'),
+                clinical_status=item.get('clinical_status', 'active'),
+                onset_date=item.get('onset_date') or None,
+                notes=item.get('notes'),
+                diagnosed_by=diagnosed_by_id
+            )
+            db.session.add(diagnosis)
+            saved.append(diagnosis)
+
+        visit = db.session.query(Encounter).filter(Encounter.id == visit_id).first()
+        if visit and visit.status in ('checked_in', 'vitals_recorded'):
+            visit.status = 'in_consultation'
+
+        db.session.commit()
+        return [d.to_dict() for d in saved]
+
+    @staticmethod
+    def get_diagnoses(visit_id: UUID) -> List[dict]:
+        diagnoses = db.session.query(Diagnosis).filter(
+            Diagnosis.encounter_id == visit_id
+        ).all()
+        return [d.to_dict() for d in diagnoses]
+
+
+# ---------------------------------------------------------------------------
+# Prescription Service
+# ---------------------------------------------------------------------------
+
+class HomeCarePrescriptionService:
+
+    @staticmethod
+    def save_prescription(
+        visit_id: UUID,
+        patient_id: UUID,
+        provider_id: UUID,
+        items: List[dict],
+        notes: Optional[str] = None,
+        finalize: bool = False
+    ) -> dict:
+        """Create or replace prescription for a visit."""
+        prescription = db.session.query(OPDPrescription).filter(
+            OPDPrescription.encounter_id == visit_id
+        ).first()
+
+        if not prescription:
+            prescription = OPDPrescription(
+                id=uuid4(),
+                encounter_id=visit_id,
+                patient_id=patient_id,
+                prescribed_by=provider_id,
+                status=PrescriptionStatus.DRAFT,
+                notes=notes
+            )
+            db.session.add(prescription)
+            db.session.flush()
+        else:
+            prescription.notes = notes
+            db.session.query(OPDPrescriptionItem).filter(
+                OPDPrescriptionItem.prescription_id == prescription.id
+            ).delete()
+
+        for item in items:
+            pi = OPDPrescriptionItem(
+                id=uuid4(),
+                prescription_id=prescription.id,
+                medicine_id=UUID(item['medicine_id']) if item.get('medicine_id') else None,
+                medicine_name=item['medicine_name'],
+                dosage=item.get('dosage'),
+                dosage_morning=item.get('dosage_morning'),
+                dosage_afternoon=item.get('dosage_afternoon'),
+                dosage_night=item.get('dosage_night'),
+                frequency=item.get('frequency'),
+                sos=item.get('sos', False),
+                duration=item.get('duration'),
+                duration_unit=item.get('duration_unit', 'days'),
+                quantity=item.get('quantity'),
+                instructions=item.get('instructions'),
+                route=item.get('route', 'oral'),
+                medicine_type=item.get('medicine_type'),
+                dosage_form=item.get('dosage_form'),
+                warning_signs=item.get('warning_signs'),
+            )
+            db.session.add(pi)
+
+        if finalize:
+            prescription.status = PrescriptionStatus.FINALIZED
+
+        db.session.commit()
+
+        prescription = db.session.query(OPDPrescription).options(
+            joinedload(OPDPrescription.items)
+        ).filter(OPDPrescription.id == prescription.id).first()
+        return prescription.to_dict()
+
+    @staticmethod
+    def get_prescription(visit_id: UUID) -> Optional[dict]:
+        prescription = db.session.query(OPDPrescription).options(
+            joinedload(OPDPrescription.items)
+        ).filter(OPDPrescription.encounter_id == visit_id).first()
+        return prescription.to_dict() if prescription else None
+
+    @staticmethod
+    def update_status(visit_id: UUID, status: str) -> Optional[dict]:
+        prescription = db.session.query(OPDPrescription).filter(
+            OPDPrescription.encounter_id == visit_id
+        ).first()
+        if not prescription:
+            return None
+        prescription.status = PrescriptionStatus(status)
+        db.session.commit()
+        return prescription.to_dict()
+
+
+# ---------------------------------------------------------------------------
+# Lab Order Service
+# ---------------------------------------------------------------------------
+
+class HomeCareLabOrderService:
+
+    @staticmethod
+    def save_lab_order(
+        visit_id: UUID,
+        patient_id: UUID,
+        provider_id: UUID,
+        items: List[dict],
+        notes: Optional[str] = None
+    ) -> dict:
+        """Create or replace lab order for a visit."""
+        lab_order = db.session.query(OPDLabOrder).filter(
+            OPDLabOrder.encounter_id == visit_id
+        ).first()
+
+        if not lab_order:
+            lab_order = OPDLabOrder(
+                id=uuid4(),
+                encounter_id=visit_id,
+                patient_id=patient_id,
+                ordered_by=provider_id,
+                status=LabOrderStatus.ORDERED,
+                notes=notes
+            )
+            db.session.add(lab_order)
+            db.session.flush()
+        else:
+            lab_order.notes = notes
+            db.session.query(OPDLabOrderItem).filter(
+                OPDLabOrderItem.lab_order_id == lab_order.id
+            ).delete()
+
+        for item in items:
+            urgency_str = (item.get('urgency') or 'routine').lower()
+            li = OPDLabOrderItem(
+                id=uuid4(),
+                lab_order_id=lab_order.id,
+                test_name=item['test_name'],
+                urgency=LabUrgency(urgency_str),
+                notes=item.get('notes')
+            )
+            db.session.add(li)
+
+        db.session.commit()
+
+        lab_order = db.session.query(OPDLabOrder).options(
+            joinedload(OPDLabOrder.items)
+        ).filter(OPDLabOrder.id == lab_order.id).first()
+        return lab_order.to_dict()
+
+    @staticmethod
+    def get_lab_order(visit_id: UUID) -> Optional[dict]:
+        lab_order = db.session.query(OPDLabOrder).options(
+            joinedload(OPDLabOrder.items)
+        ).filter(OPDLabOrder.encounter_id == visit_id).first()
+        return lab_order.to_dict() if lab_order else None
