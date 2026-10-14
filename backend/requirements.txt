@@ -55,5 +55,4 @@ google-auth-oauthlib>=1.2
 google-api-python-client>=2.130
 googlemaps==4.10.0
 
-
-cloudinary==2.24.0
+cloudinary>=1.40.0
